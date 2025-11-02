@@ -6,26 +6,21 @@
 <title>Floppy F4ck Maker</title>
 <style>
     body { margin:0; font-family:Arial; background:#111; color:white; text-align:center; }
-    
     #menu {
         padding:20px; max-width:400px; margin:auto;
         background:#1c1c1c; border-radius:10px;
         margin-top:20px;
     }
-    
     h1 { font-size:28px; color:#0fdb8f; }
     h3 { color:#bbb; margin-top:5px; font-size:14px; }
-
     label { font-size:15px; margin-top:14px; display:block; }
     input { display:block; margin:6px auto 14px auto; }
-
     button {
         background:#00eaff; border:none; padding:12px 25px;
         border-radius:8px; cursor:pointer; margin-top:20px;
         font-size:16px; font-weight:bold;
     }
     button:hover { background:#00cce0; }
-
     #gameCanvas { display:none; background:black; margin:auto; margin-top:20px; }
 </style>
 </head>
@@ -55,6 +50,9 @@
     <label>Game Over Text</label>
     <input type="text" id="goText" placeholder="Game Over!">
 
+    <label>Game Over Image (Optional)</label>
+    <input type="file" id="goImg" accept="image/*">
+
     <button onclick="startSetup()">Generate Game</button>
 </div>
 
@@ -68,13 +66,14 @@ let player, pipes, score, gameOver;
 let gravity = 0.4;
 let jumpPower = -9;
 let pipeSpeed = 2;
-let gap = 180; // ✅ Bigger gap like Flappy Bird
-let pipeWidth = 60; // ✅ smaller pipes
-let charSize = 35; // ✅ smaller player
+let gap = 180;
+let pipeWidth = 60;
+let charSize = 35;
 
 let bgImg = new Image();
 let charImg = new Image();
 let obImg = new Image();
+let goImg = new Image();
 
 let bgMusic = new Audio();
 let deathMusic = new Audio();
@@ -93,12 +92,14 @@ function startSetup() {
         new Promise(res => toBase64(document.getElementById("bgImg").files[0], res)),
         new Promise(res => toBase64(document.getElementById("bgMusic").files[0], res)),
         new Promise(res => toBase64(document.getElementById("deathSound").files[0], res)),
-    ]).then(([ci, oi, bi, bm, dm]) => {
+        new Promise(res => toBase64(document.getElementById("goImg").files[0], res)),
+    ]).then(([ci, oi, bi, bm, dm, gi]) => {
         charImg.src = ci;
         obImg.src = oi;
         bgImg.src = bi;
         bgMusic.src = bm;
         deathMusic.src = dm;
+        goImg.src = gi;
 
         let goText = document.getElementById("goText").value || "Game Over";
         startGame(goText);
@@ -144,17 +145,13 @@ function startGame(goText) {
 
             if(player.x+charSize > p.x && player.x < p.x + pipeWidth &&
                (player.y < p.top || player.y+charSize > p.top+gap)) {
-                gameOver = true;
-                bgMusic.pause(); deathMusic.play();
+                die();
             }
 
             if(p.x === player.x) score++;
         }
 
-        if(player.y > 560 || player.y < 0) {
-            gameOver = true;
-            bgMusic.pause(); deathMusic.play();
-        }
+        if(player.y > 560 || player.y < 0) die();
 
         ctx.fillStyle="white";
         ctx.font="26px Arial";
@@ -165,19 +162,30 @@ function startGame(goText) {
     loop();
 }
 
+function die(){
+    gameOver = true;
+    if(bgMusic.src) bgMusic.pause();
+    if(deathMusic.src) deathMusic.play();
+}
+
 function drawGameOver(msg){
     ctx.fillStyle="rgba(0,0,0,0.65)";
     ctx.fillRect(0,0,360,600);
 
-    ctx.fillStyle="white";
-    ctx.font="26px Arial";
-    ctx.fillText(msg, 90,260);
+    if(goImg.src) {
+        let w = 200, h = 200;
+        ctx.drawImage(goImg, 80,150,w,h);
+    } else {
+        ctx.fillStyle="white";
+        ctx.font="26px Arial";
+        ctx.fillText(msg, 100,260);
+    }
+
     ctx.font="18px Arial";
-    ctx.fillText("Tap To Restart", 110,300);
+    ctx.fillText("Tap To Restart", 110,360);
 
     canvas.onclick = ()=> location.reload();
 }
 </script>
-
 </body>
 </html>
