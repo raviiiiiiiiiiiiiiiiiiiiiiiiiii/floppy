@@ -1,438 +1,172 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>Floppy F4ck — Game Maker</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Floppy F4ck Maker</title>
 <style>
-  :root{--bg:#070707;--panel:#0f0f0f;--accent:#13e37a;--muted:#9aa;}
-  html,body{height:100%;margin:0;background:var(--bg);color:#fff;font-family:Inter,system-ui,Arial,Helvetica}
-  .wrap{max-width:980px;margin:12px auto;padding:12px}
-  header{display:flex;justify-content:space-between;align-items:center}
-  h1{margin:0;font-size:18px}
-  .subtitle{color:var(--muted);font-size:13px}
-  .panel{background:var(--panel);border-radius:12px;padding:12px;margin-top:12px}
-  label{display:block;font-size:13px;color:var(--muted);margin:8px 0 6px}
-  input[type="text"], input[type="file"], input[type="number"], select, textarea{
-    width:100%;box-sizing:border-box;padding:8px;border-radius:8px;border:1px solid #222;background:#0a0a0a;color:#fff;font-size:14px;
-  }
-  .row{display:flex;gap:8px;flex-wrap:wrap}
-  .col{flex:1;min-width:140px}
-  button{background:var(--accent);border:none;color:#041;padding:10px 12px;border-radius:8px;cursor:pointer;font-weight:700}
-  button.ghost{background:transparent;border:1px solid #222;color:var(--muted)}
-  .hint{font-size:12px;color:var(--muted);margin-top:6px}
-  #gameCanvas{display:block;width:100%;height:calc(100vh - 20px);border-radius:6px;background:#000;touch-action:none}
-  .fullHide{display:none!important}
-  .topOverlay{position:fixed;left:0;right:0;top:10px;display:flex;justify-content:space-between;padding:8px 14px;pointer-events:none}
-  .scoreBox{pointer-events:auto;background:rgba(0,0,0,0.35);padding:6px 10px;border-radius:10px;font-weight:700;font-size:20px}
-  .controls{pointer-events:auto;display:flex;gap:8px;align-items:center}
-  .iconBtn{background:rgba(0,0,0,0.35);border-radius:8px;padding:8px;color:#fff;border:1px solid rgba(255,255,255,0.06);cursor:pointer}
-  .center{text-align:center}
-  footer{margin-top:8px;color:var(--muted);font-size:12px;text-align:center}
-  @media(min-width:900px){ .wrap{max-width:980px} }
+    body { margin:0; font-family:Arial; background:#000; color:white; text-align:center; }
+    #menu { padding:20px; }
+    input { display:block; margin:10px auto; }
+    #gameCanvas { display:none; background:black; }
+    #audioToggle { position:absolute; top:10px; right:10px; font-size:28px; cursor:pointer; display:none; }
 </style>
 </head>
 <body>
-  <div class="wrap" id="mainWrap">
-    <header>
-      <div>
-        <h1>Floppy F4ck — Game Maker</h1>
-        <div class="subtitle">Create portrait Flappy-style games. No backend. Share via link.</div>
-      </div>
-      <div class="subtitle">Mobile-first • Single file</div>
-    </header>
 
-    <!-- Creator UI -->
-    <div id="creator" class="panel" aria-hidden="false">
-      <div style="display:flex;gap:12px;flex-wrap:wrap">
-        <div style="flex:1;min-width:220px">
-          <label>Game name (used as id in link)</label>
-          <input id="gameName" placeholder="my-flop" />
-          <div class="hint">lowercase letters, numbers, hyphen. leave blank for random id.</div>
-        </div>
-        <div style="min-width:160px">
-          <label>Preview size</label>
-          <select id="previewSize"><option value="mobile">Mobile (portrait)</option><option value="tablet">Tablet</option></select>
-        </div>
-      </div>
+<div id="menu">
+    <h2>Create Your Game</h2>
+    <label>Character Image</label><input type="file" id="charImg" accept="image/*">
+    <label>Pipe/Image Obstacle</label><input type="file" id="obImg" accept="image/*">
+    <label>Background</label><input type="file" id="bgImg" accept="image/*">
+    <label>Game Music</label><input type="file" id="bgMusic" accept="audio/*">
+    <label>Death Sound</label><input type="file" id="deathMusic" accept="audio/*">
+    <label>Game Over Text</label><input type="text" id="goText" placeholder="Game Over!">
+    <button onclick="generateGame()">Generate Game</button>
+</div>
 
-      <div class="panel" style="margin-top:12px;background:#0b0b0b">
-        <label>Player image (PNG/JPG) — portrait avatar</label>
-        <input id="playerFile" type="file" accept="image/*" />
-        <label>Obstacle image (PNG/JPG) — horizontal bricks/walls</label>
-        <input id="obstFile" type="file" accept="image/*" />
-        <label>Background image (optional)</label>
-        <input id="bgFile" type="file" accept="image/*" />
-
-        <div class="row" style="margin-top:10px">
-          <div class="col">
-            <label>In-game BGM (mp3)</label>
-            <input id="bgmFile" type="file" accept="audio/*" />
-          </div>
-          <div class="col">
-            <label>Game-over sound (mp3)</label>
-            <input id="deadFile" type="file" accept="audio/*" />
-          </div>
-        </div>
-
-        <label>Game Over Image (optional)</label>
-        <input id="gameOverImage" type="file" accept="image/*" />
-        <label>Game Over Text</label>
-        <input id="gameOverText" placeholder="You lost! Try again." />
-
-        <div class="row" style="margin-top:12px;align-items:center">
-          <div class="col">
-            <label>Gravity</label>
-            <input id="gravity" type="number" step="0.05" value="0.55" />
-          </div>
-          <div class="col">
-            <label>Jump Strength</label>
-            <input id="jumpStrength" type="number" step="0.5" value="9" />
-          </div>
-          <div class="col">
-            <label>Pipe speed (start)</label>
-            <input id="pipeSpeed" type="number" step="0.1" value="2.4" />
-          </div>
-        </div>
-
-        <div class="row" style="margin-top:10px">
-          <div class="col">
-            <label>Gap size (px)</label>
-            <input id="pipeGap" type="number" value="150" />
-          </div>
-          <div class="col">
-            <label>Pipe spawn rate (frames)</label>
-            <input id="spawnRate" type="number" value="110" />
-          </div>
-        </div>
-
-        <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
-          <button id="generateBtn">Generate Game</button>
-          <button id="previewBtn" class="ghost">Preview</button>
-          <button id="clearBtn" class="ghost">Clear Saved</button>
-        </div>
-
-        <div id="linkArea" class="panel" style="margin-top:12px;display:none">
-          <div class="center"><input id="shareInput" style="width:100%;padding:10px;border-radius:8px;background:#0a0a0a;border:1px solid #222;color:#ddd" readonly /></div>
-          <div style="display:flex;gap:8px;margin-top:8px"><button id="copyLink">Copy Link</button><button id="openLink" class="ghost">Open</button></div>
-          <div class="hint" style="margin-top:10px">Tip: Keep assets compressed — localStorage is limited (~5MB).</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Game area (fullscreen portrait) -->
-    <div id="playerShell" class="panel fullHide" style="padding:0;overflow:hidden">
-      <canvas id="gameCanvas"></canvas>
-      <!-- overlays -->
-      <div class="topOverlay" style="pointer-events:none">
-        <div class="scoreBox" id="scoreBox" style="pointer-events:auto">0</div>
-        <div class="controls" style="pointer-events:auto">
-          <button id="soundToggle" class="iconBtn">🔊</button>
-          <button id="backBtn" class="iconBtn ghost">Back</button>
-        </div>
-      </div>
-      <div id="gameOverOverlay" class="center fullHide" style="position:fixed;left:0;right:0;top:35%;pointer-events:auto">
-        <div id="gameOverImgWrap"></div>
-        <div id="gameOverTextDisplay" style="margin-top:12px;font-size:20px;font-weight:700"></div>
-        <div style="margin-top:12px"><button id="restartBtn">Restart</button></div>
-      </div>
-    </div>
-
-    <footer class="hint">Portrait fullscreen gameplay • Tap to fly • Score increments on pass • Speed rises over time</footer>
-  </div>
+<canvas id="gameCanvas" width="360" height="600"></canvas>
+<div id="audioToggle">🔊</div>
 
 <script>
-/*
-  Single-file Game Maker — portrait Flappy variant.
-  Score: on pass (B). Speed: increases over time (A).
-  Save small assets to avoid localStorage quota.
-*/
+let canvas = document.getElementById("gameCanvas");
+let ctx = canvas.getContext("2d");
 
-/* ---------- helpers ---------- */
-const $ = id => document.getElementById(id);
-const readFile = f => new Promise(res=>{ if(!f){res(null);return;} const r=new FileReader(); r.onload=()=>res(r.result); r.readAsDataURL(f); });
-const randId = (n=7)=>{const s="abcdefghijklmnopqrstuvwxyz0123456789";let r="";for(let i=0;i<n;i++)r+=s[Math.floor(Math.random()*s.length)];return r}
-const sanitize = s => s? s.toLowerCase().replace(/[^a-z0-9\-]/g,'').slice(0,40) : "";
-const PREFIX = "floppy_game_";
+let player, pipes, score, gameOver, bg, charImg, obImg;
+let gravity = 0.4;
+let jumpPower = -8;
+let pipeSpeed = 2;
+let gap = 140; // ✅ Increased gap
+let pipeWidth = 70; // ✅ Smaller pipes
+let audioEnabled = true;
 
-/* ---------- DOM refs ---------- */
-const creator = $('creator'), playerShell = $('playerShell');
-const generateBtn = $('generateBtn'), previewBtn = $('previewBtn'), clearBtn = $('clearBtn');
-const copyLink = $('copyLink'), openLink = $('openLink'), shareInput = $('shareInput'), linkArea = $('linkArea');
-const backBtn = $('backBtn'), restartBtn = $('restartBtn'), soundToggle = $('soundToggle');
-const canvas = $('gameCanvas'), ctx = canvas.getContext('2d');
-const scoreBox = $('scoreBox'), gameOverOverlay = $('gameOverOverlay'), gameOverImgWrap = $('gameOverImgWrap'), gameOverTextDisplay = $('gameOverTextDisplay');
+let bgSound = new Audio();
+let deathSound = new Audio();
 
-/* ---------- load/save config ---------- */
-function saveConfig(id,obj){ try{ localStorage.setItem(PREFIX + id, JSON.stringify(obj)); return true } catch(e){ console.error(e); return false } }
-function loadConfig(id){ try{ const v=localStorage.getItem(PREFIX+id); return v? JSON.parse(v): null } catch(e){return null} }
-function clearConfigs(){ for(let k in localStorage) if(k.startsWith(PREFIX)) localStorage.removeItem(k) }
-
-/* ---------- Creator actions ---------- */
-generateBtn.onclick = async () => {
-  generateBtn.disabled = true; generateBtn.textContent = "Saving...";
-  const player = await readFile($('playerFile').files[0]);
-  const obst = await readFile($('obstFile').files[0]);
-  const bg = await readFile($('bgFile').files[0]);
-  const bgm = await readFile($('bgmFile').files[0]);
-  const dead = await readFile($('deadFile').files[0]);
-  const goImg = await readFile($('gameOverImage').files[0]);
-  const goText = $('gameOverText').value || "You lost!";
-  const idRaw = sanitize($('gameName').value) || randId(7);
-  let id = idRaw;
-  if(loadConfig(id)){ let i=1; while(loadConfig(id+i)) i++; id = id + i }
-  const config = {
-    id, player, obstacle:obst, background:bg, bgm, dead, gameOverImage:goImg, gameOverText:goText,
-    gravity:parseFloat($('gravity').value)||0.55, jump:parseFloat($('jumpStrength').value)||9,
-    pipeSpeed:parseFloat($('pipeSpeed').value)||2.4, gap:parseInt($('pipeGap').value)||150, spawnRate:parseInt($('spawnRate').value)||110
-  };
-  const ok = saveConfig(id, config);
-  generateBtn.disabled=false; generateBtn.textContent="Generate Game";
-  if(!ok){ alert("Save failed — storage/quota issue. Try smaller files."); return; }
-  const url = location.origin + location.pathname + "?id=" + encodeURIComponent(id);
-  shareInput.value = url; linkArea.style.display='block';
-  setTimeout(()=>{ location.href = url }, 700);
+document.getElementById("audioToggle").onclick = () => {
+    audioEnabled = !audioEnabled;
+    document.getElementById("audioToggle").innerText = audioEnabled ? "🔊" : "🔇";
+    if(audioEnabled) bgSound.play(); else bgSound.pause();
 };
 
-previewBtn.onclick = async ()=>{
-  // build temporary config
-  const player = await readFile($('playerFile').files[0]);
-  const obst = await readFile($('obstFile').files[0]);
-  if(!player || !obst){ alert("Upload player and obstacle to preview"); return; }
-  const cfg = {
-    player, obstacle:obst, background: await readFile($('bgFile').files[0]),
-    bgm: await readFile($('bgmFile').files[0]), dead: await readFile($('deadFile').files[0]),
-    gameOverImage: await readFile($('gameOverImage').files[0]), gameOverText: $('gameOverText').value||"You lost!",
-    gravity: parseFloat($('gravity').value)||0.55, jump: parseFloat($('jumpStrength').value)||9,
-    pipeSpeed: parseFloat($('pipeSpeed').value)||2.4, gap: parseInt($('pipeGap').value)||150, spawnRate: parseInt($('spawnRate').value)||110
-  };
-  startGame(cfg, true);
-};
-
-clearBtn.onclick = ()=>{ if(confirm("Clear all saved games?")){ clearConfigs(); alert("Cleared."); linkArea.style.display='none'; } }
-copyLink.onclick = ()=>{ shareInput.select(); document.execCommand('copy'); copyLink.textContent='Copied!'; setTimeout(()=>copyLink.textContent='Copy',1000) }
-openLink.onclick = ()=>{ if(shareInput.value) window.open(shareInput.value,'_blank') }
-
-/* ---------- Routing: check ?id=  ---------- */
-const params = new URLSearchParams(location.search);
-const idParam = params.get('id');
-if(idParam){
-  const cfg = loadConfig(idParam);
-  if(!cfg){
-    // show creator but with notice
-    alert("Game not found. Go back and Generate to create link.");
-  } else {
-    // auto start game
-    startGame(cfg, false);
-  }
+// Load File to Base64
+function toBase64(file, cb) {
+    if (!file) return cb("");
+    let r = new FileReader();
+    r.onload = ()=> cb(r.result);
+    r.readAsDataURL(file);
 }
 
-/* ---------- Core Game Logic ---------- */
-let state = null;
-let audioOn = true;
-soundToggle.onclick = ()=>{ audioOn = !audioOn; soundToggle.textContent = audioOn ? "🔊" : "🔈"; if(state && state.bgm){ if(!audioOn) state.bgm.pause(); else if(!state.running){} else state.bgm.play().catch(()=>{}); } }
+function generateGame() {
+    Promise.all([
+        new Promise(res => toBase64(document.getElementById("charImg").files[0], res)),
+        new Promise(res => toBase64(document.getElementById("obImg").files[0], res)),
+        new Promise(res => toBase64(document.getElementById("bgImg").files[0], res)),
+        new Promise(res => toBase64(document.getElementById("bgMusic").files[0], res)),
+        new Promise(res => toBase64(document.getElementById("deathMusic").files[0], res)),
+    ]).then(([ci, oi, bi, bm, dm]) => {
+        
+        let data = {
+            ci, oi, bi, bm, dm,
+            go: document.getElementById("goText").value
+        };
 
-backBtn.onclick = ()=>{ location.href = location.pathname }
-restartBtn.onclick = ()=>{ if(state && state.cfg) startGame(state.cfg, state.isPreview) }
+        let id = "g" + Date.now();
+        localStorage.setItem(id, JSON.stringify(data));
 
-function fitCanvasPortrait(){
-  // fill viewport height, keep aspect narrow (portrait)
-  const ww = window.innerWidth;
-  const hh = window.innerHeight;
-  canvas.width = Math.max(320, Math.round(Math.min(420, ww)));
-  canvas.height = Math.max(520, Math.round(hh - 10)); // tall canvas
-  // scale if device very narrow
+        location.href = location.origin + location.pathname + "?id=" + id;
+    });
 }
-window.addEventListener('resize', ()=>{ if(!playerShell.classList.contains('fullHide')) fitCanvasPortrait(); });
 
-function startGame(cfg, isPreview){
-  // hide creator, show game shell
-  creator.classList.add('fullHide');
-  playerShell.classList.remove('fullHide');
-  linkArea.style.display='none';
-  gameOverOverlay.classList.add('fullHide');
-  fitCanvasPortrait();
+function loadGame(data) {
+    charImg = new Image(); charImg.src = data.ci;
+    obImg = new Image(); obImg.src = data.oi;
+    bg = new Image(); bg.src = data.bi;
 
-  // load assets
-  const PLAYER = new Image(), OBST = new Image(), BG = new Image(), GO = new Image();
-  if(cfg.player) PLAYER.src = cfg.player;
-  if(cfg.obstacle) OBST.src = cfg.obstacle;
-  if(cfg.background) BG.src = cfg.background;
-  if(cfg.gameOverImage) GO.src = cfg.gameOverImage;
-  let bgm=null, dead=null;
-  if(cfg.bgm){ bgm = new Audio(cfg.bgm); bgm.loop=true; bgm.preload='auto' }
-  if(cfg.dead){ dead = new Audio(cfg.dead); dead.preload='auto' }
+    bgSound.src = data.bm;
+    deathSound.src = data.dm;
 
-  // state init
-  state = {
-    cfg, isPreview: !!isPreview,
-    player:{ x: Math.round(canvas.width*0.28), y: Math.round(canvas.height/2), w:60, h:60, vy:0 },
-    pipes:[], frame:0, score:0, running:false, raf:0, bgm, dead
-  };
+    if(audioEnabled && bgSound.src) bgSound.play();
 
-  // scale player size after image loads
-  PLAYER.onload = ()=>{ const desired = Math.round(canvas.width * 0.14); const ratio = PLAYER.naturalHeight/PLAYER.naturalWidth || 1; state.player.w = desired; state.player.h = Math.round(desired*ratio); state.player.y = Math.round(canvas.height/2 - state.player.h/2); }
-  OBST.onload = ()=>{/* */}
-  GO.onload = ()=>{/* */}
+    startGame(data.go);
+}
 
-  // physics params
-  const gravity = cfg.gravity || 0.55;
-  const jump = cfg.jump || 9;
-  let pipeSpeed = cfg.pipeSpeed || 2.4;
-  const gapBase = cfg.gap || 150;
-  const spawnRate = cfg.spawnRate || 110;
-  let currentGap = gapBase;
-  let spawnTimer = 0;
+function startGame(goText){
+    document.getElementById("menu").style.display="none";
+    canvas.style.display="block";
+    document.getElementById("audioToggle").style.display="block";
 
-  // controls
-  const flap = ()=>{ if(!state.running) startRun(); state.player.vy = -Math.abs(jump); }
-  canvas.addEventListener('touchstart', e=>{ e.preventDefault(); flap(); }, {passive:false});
-  canvas.addEventListener('mousedown', e=>{ flap(); });
+    player = { x:100, y:300, vy:0 };
+    pipes = [];
+    score = 0;
+    gameOver = false;
 
-  function startRun(){
-    if(state.running) return;
-    state.running = true; state.score = 0; state.pipes = []; state.frame = 0; spawnTimer=0; currentGap = gapBase; pipeSpeed = cfg.pipeSpeed || 2.4;
-    // play bgm if audioOn
-    if(state.bgm && audioOn){ state.bgm.currentTime=0; state.bgm.play().catch(()=>{}); }
-    tick();
-  }
+    canvas.addEventListener("touchstart", ()=> player.vy = jumpPower);
+    canvas.addEventListener("mousedown", ()=> player.vy = jumpPower);
 
-  function gameOver(){
-    if(!state.running) return;
-    state.running = false;
-    // stop bgm
-    if(state.bgm){ try{ state.bgm.pause(); state.bgm.currentTime=0; }catch(e){} }
-    // play dead
-    if(state.dead && audioOn){ state.dead.currentTime=0; state.dead.play().catch(()=>{}); }
-    // show overlay
-    gameOverImgWrap.innerHTML = "";
-    if(cfg.gameOverImage){
-      const img = document.createElement('img');
-      img.src = cfg.gameOverImage; img.style.maxWidth = "60%"; img.style.maxHeight = "30vh"; img.style.borderRadius="8px";
-      gameOverImgWrap.appendChild(img);
-    }
-    gameOverTextDisplay.textContent = cfg.gameOverText || "You lost!";
-    gameOverOverlay.classList.remove('fullHide');
-    scoreBox.textContent = state.score;
-    // show restart
-    restartBtn.style.display = 'inline-block';
-  }
+    setInterval(()=> {
+        let topH = Math.random()*250 + 50;
+        pipes.push({ x:360, top: topH });
+    }, 1600);
 
-  function spawnPair(){
-    // top rect height random, bottom starts after gap
-    const w = Math.round(canvas.width * 1.15); // full width slice (we draw horiz pipes)
-    const minTop = 40;
-    const maxTop = Math.max(80, canvas.height - currentGap - 100);
-    const topH = minTop + Math.floor(Math.random()*(Math.max(0, maxTop - minTop)));
-    const bottomY = topH + currentGap;
-    state.pipes.push({ x: canvas.width + 20, top: true, y: 0, w: w, h: topH, passed:false });
-    state.pipes.push({ x: canvas.width + 20, top: false, y: bottomY, w: w, h: canvas.height - bottomY, passed:false });
-  }
+    requestAnimationFrame(()=>loop(goText));
+}
 
-  function tick(){
-    update(); render();
-    if(state.running) state.raf = requestAnimationFrame(tick);
-  }
+function loop(goText){
+    if (gameOver) return drawGameOver(goText);
 
-  function update(){
-    state.frame++;
-    // gravity
-    state.player.vy += gravity;
-    state.player.y += state.player.vy;
-    // spawn
-    spawnTimer++;
-    if(spawnTimer >= spawnRate){
-      spawnTimer = 0; spawnPair();
-    }
-    // move pipes leftwards
-    for(let i=state.pipes.length-1;i>=0;i--){
-      const p = state.pipes[i];
-      p.x -= pipeSpeed;
-      // scoring: when both top&bottom pair not yet marked and passed
-      // We count scoring when any pipe pair passes player's x
-      if(!p.passed && (p.x + p.w) < state.player.x){
-        // Mark all pipes at that time - but ensure only increment once per pair
-        // We'll increment when encountering top pipe (p.top true)
-        if(p.top){
-          state.score++;
-          scoreBox.textContent = state.score;
+    ctx.clearRect(0,0,360,600);
+
+    if(bg.src) ctx.drawImage(bg, 0,0,360,600);
+
+    // Player
+    player.vy += gravity;
+    player.y += player.vy;
+    ctx.drawImage(charImg, player.x, player.y, 40,40);
+
+    // Pipes
+    for(let p of pipes){
+        p.x -= pipeSpeed;
+
+        ctx.drawImage(obImg, p.x, 0, pipeWidth, p.top);
+        ctx.drawImage(obImg, p.x, p.top + gap, pipeWidth, 600 - p.top - gap);
+
+        if(player.x+40 > p.x && player.x < p.x+pipeWidth &&
+          (player.y < p.top || player.y+40 > p.top+gap)) {
+            gameOver = true;
+            if(audioEnabled) { bgSound.pause(); deathSound.play(); }
         }
-        p.passed = true;
-      }
-      if(p.x + p.w < -100) state.pipes.splice(i,1);
+
+        if(p.x === player.x) score++;
     }
 
-    // collision with ground/ceiling
-    if(state.player.y + state.player.h > canvas.height || state.player.y < 0){
-      return gameOver();
-    }
-    // collision with pipes
-    for(const p of state.pipes){
-      if(rectOverlap(state.player.x, state.player.y, state.player.w, state.player.h, p.x, p.y, p.w, p.h)){
-        return gameOver();
-      }
-    }
+    if(player.y > 560 || player.y < 0) gameOver = true;
 
-    // speed progression every few frames
-    if(state.frame % 300 === 0){
-      pipeSpeed += 0.25; // speed up
-      currentGap = Math.max(90, currentGap - 8); // reduce gap
-    }
-  }
+    ctx.fillStyle="white"; ctx.font="24px Arial";
+    ctx.fillText("Score: "+score, 10,30);
 
-  function rectOverlap(x1,y1,w1,h1,x2,y2,w2,h2){
-    return !(x2 > x1 + w1 || x2 + w2 < x1 || y2 > y1 + h1 || y2 + h2 < y1);
-  }
-
-  function render(){
-    // background
-    if(BG.src && BG.complete){
-      ctx.drawImage(BG, 0, 0, BG.naturalWidth, BG.naturalHeight, 0, 0, canvas.width, canvas.height);
-    } else {
-      ctx.fillStyle = "#081018";
-      ctx.fillRect(0,0,canvas.width,canvas.height);
-    }
-
-    // pipes
-    for(const p of state.pipes){
-      if(OBST.src && OBST.complete){
-        // draw obstacle image stretched. For top pipes we flip
-        ctx.save();
-        if(p.top){
-          ctx.translate(p.x + p.w/2, p.y + p.h/2);
-          ctx.scale(1,-1);
-          ctx.drawImage(OBST, -p.w/2, -p.h/2, p.w, p.h);
-          ctx.restore();
-        } else {
-          ctx.drawImage(OBST, p.x, p.y, p.w, p.h);
-        }
-      } else {
-        ctx.fillStyle = "#aa4422";
-        ctx.fillRect(p.x, p.y, p.w, p.h);
-      }
-    }
-
-    // player
-    if(PLAYER.src && PLAYER.complete){
-      ctx.drawImage(PLAYER, state.player.x, state.player.y, state.player.w, state.player.h);
-    } else {
-      ctx.fillStyle = "#ffd92e";
-      ctx.fillRect(state.player.x, state.player.y, state.player.w, state.player.h);
-    }
-  }
-
-  // initial HUD
-  scoreBox.textContent = state.score;
-  restartBtn.style.display = 'none';
-  gameOverOverlay.classList.add('fullHide');
-
-  // start when user first taps (auto)
-  // If isPreview: immediately start
-  if(isPreview) startRun();
+    requestAnimationFrame(()=>loop(goText));
 }
 
-/* ---------- safety ---------- */
-window.addEventListener('error', e=>console.error('Runtime', e));
+function drawGameOver(goText){
+    ctx.fillStyle="rgba(0,0,0,0.5)";
+    ctx.fillRect(0,0,360,600);
+    ctx.fillStyle="white";
+    ctx.font="26px Arial";
+    ctx.fillText(goText || "Game Over!", 80,300);
+    ctx.font="16px Arial";
+    ctx.fillText("Tap to Restart", 120,340);
+
+    canvas.onclick = ()=>location.reload();
+}
+
+// Check URL id
+const id = new URLSearchParams(location.search).get("id");
+if(id){
+    let saved = localStorage.getItem(id);
+    if(saved) loadGame(JSON.parse(saved));
+}
 </script>
+
 </body>
 </html>
