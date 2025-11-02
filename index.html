@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Floppy F4ck Maker</title>
+<title>Floppy F4ck</title>
 <style>
     body { margin:0; font-family:Arial; background:#111; color:white; text-align:center; }
     #menu {
@@ -20,19 +20,18 @@
         border-radius:8px; cursor:pointer; margin-top:20px;
         font-size:16px; font-weight:bold;
     }
-    button:hover { background:#00cce0; }
-    #gameCanvas { display:none; background:black; margin:auto; margin-top:20px; }
+    #gameCanvas { display:none; margin:auto; margin-top:20px; background:#000; }
 </style>
 </head>
 <body>
 
-<h1>Floppy F4ck</h1>
-<h3>“Why should developers have all the fun?”</h3>
+<h1>Floppy F4ck 🔥</h1>
+<h3>Why should developers have all the fun?</h3>
 
 <div id="menu">
-    <h2>Create Your Game</h2>
+    <h2>Create Your Game 👇</h2>
 
-    <label>Character Image</label>
+    <label>Character Image (Required)</label>
     <input type="file" id="charImg" accept="image/*">
 
     <label>Obstacle Image</label>
@@ -53,139 +52,136 @@
     <label>Game Over Image (Optional)</label>
     <input type="file" id="goImg" accept="image/*">
 
-    <button onclick="startSetup()">Generate Game</button>
+    <button onclick="startSetup()">Generate Game ✅</button>
 </div>
 
 <canvas id="gameCanvas" width="360" height="600"></canvas>
 
 <script>
-let canvas = document.getElementById("gameCanvas");
-let ctx = canvas.getContext("2d");
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
 
-let player, pipes, score, gameOver;
-let gravity = 0.4;
-let jumpPower = -9;
-let pipeSpeed = 2;
-let gap = 180;
-let pipeWidth = 60;
-let charSize = 35;
+let gravity = 0.35, jump = -7;
+let pipeSpeed = 2.2, gap = 165;
+let pipeW = 60, charSize = 35;
+let player, pipes, score, isGameOver, restartBtn;
 
-let bgImg = new Image();
-let charImg = new Image();
-let obImg = new Image();
-let goImg = new Image();
+let images = {
+    charImg:new Image(), obImg:new Image(), bgImg:new Image(), goImg:new Image()
+};
+let sounds = {
+    bg:new Audio(), death:new Audio()
+};
 
-let bgMusic = new Audio();
-let deathMusic = new Audio();
+function to64(f){ return new Promise(res=>{
+    if(!f) return res("");
+    let r=new FileReader(); r.onload=()=>res(r.result); r.readAsDataURL(f);
+});}
 
-function toBase64(file, cb) {
-    if (!file) return cb("");
-    let r = new FileReader();
-    r.onload = ()=> cb(r.result);
-    r.readAsDataURL(file);
+async function startSetup(){
+    let input = id=>document.getElementById(id);
+    let [ci,oi,bi,bm,dm,gi] = await Promise.all([
+        to64(input("charImg").files[0]),
+        to64(input("obImg").files[0]),
+        to64(input("bgImg").files[0]),
+        to64(input("bgMusic").files[0]),
+        to64(input("deathSound").files[0]),
+        to64(input("goImg").files[0]),
+    ]);
+
+    images.charImg.src = ci;
+    images.obImg.src = oi;
+    images.bgImg.src = bi;
+    images.goImg.src = gi;
+
+    if(bm) sounds.bg.src = bm;
+    if(dm) sounds.death.src = dm;
+
+    startGame(input("goText").value || "Game Over!");
 }
 
-function startSetup() {
-    Promise.all([
-        new Promise(res => toBase64(document.getElementById("charImg").files[0], res)),
-        new Promise(res => toBase64(document.getElementById("obImg").files[0], res)),
-        new Promise(res => toBase64(document.getElementById("bgImg").files[0], res)),
-        new Promise(res => toBase64(document.getElementById("bgMusic").files[0], res)),
-        new Promise(res => toBase64(document.getElementById("deathSound").files[0], res)),
-        new Promise(res => toBase64(document.getElementById("goImg").files[0], res)),
-    ]).then(([ci, oi, bi, bm, dm, gi]) => {
-        charImg.src = ci;
-        obImg.src = oi;
-        bgImg.src = bi;
-        bgMusic.src = bm;
-        deathMusic.src = dm;
-        goImg.src = gi;
+function startGame(goText){
+    document.getElementById("menu").style.display="none";
+    canvas.style.display="block";
 
-        let goText = document.getElementById("goText").value || "Game Over";
-        startGame(goText);
-    });
-}
-
-function startGame(goText) {
-    document.getElementById("menu").style.display = "none";
-    canvas.style.display = "block";
-
-    if(bgMusic.src) bgMusic.play();
-    bgMusic.loop = true;
-
-    player = { x:100, y:250, vy:0 };
+    player = {x:100,y:250,vy:0};
     pipes = [];
     score = 0;
-    gameOver = false;
+    isGameOver = false;
 
-    canvas.addEventListener("touchstart", ()=> player.vy = jumpPower);
-    canvas.addEventListener("mousedown", ()=> player.vy = jumpPower);
+    if(sounds.bg.src){ sounds.bg.loop=true; sounds.bg.play(); }
+
+    canvas.onmousedown = ()=> player.vy = jump;
+    canvas.ontouchstart = ()=> player.vy = jump;
 
     setInterval(()=> {
-        let topH = Math.random()*220 + 50;
-        pipes.push({ x:360, top: topH });
-    }, 1500);
+        if(isGameOver) return;
+        let top = Math.random()*220+50;
+        pipes.push({x:360,top:top,passed:false});
+    },1450);
 
     function loop(){
-        if(gameOver) return drawGameOver(goText);
+        if(isGameOver) return drawGameOver(goText);
 
         ctx.clearRect(0,0,360,600);
 
-        if(bgImg.src) ctx.drawImage(bgImg,0,0,360,600);
+        if(images.bgImg.src) ctx.drawImage(images.bgImg,0,0,360,600);
 
         player.vy += gravity;
         player.y += player.vy;
-        ctx.drawImage(charImg, player.x, player.y, charSize, charSize);
+        ctx.drawImage(images.charImg, player.x, player.y, charSize, charSize);
 
-        for(let p of pipes){
+        pipes.forEach(p=>{
             p.x -= pipeSpeed;
+            ctx.drawImage(images.obImg,p.x,0,pipeW,p.top);
+            ctx.drawImage(images.obImg,p.x,p.top+gap,pipeW,600-p.top-gap);
 
-            ctx.drawImage(obImg, p.x, 0, pipeWidth, p.top);
-            ctx.drawImage(obImg, p.x, p.top + gap, pipeWidth, 600 - p.top - gap);
-
-            if(player.x+charSize > p.x && player.x < p.x + pipeWidth &&
-               (player.y < p.top || player.y+charSize > p.top+gap)) {
-                die();
+            if(!p.passed && p.x+pipeW < player.x){
+                p.passed=true;
+                score++;
             }
 
-            if(p.x === player.x) score++;
-        }
+            if(player.x + charSize > p.x && player.x < p.x + pipeW &&
+               (player.y < p.top || player.y + charSize > p.top + gap)){
+                triggerDeath();
+            }
+        });
 
-        if(player.y > 560 || player.y < 0) die();
+        if(player.y > 560 || player.y < 0) triggerDeath();
 
         ctx.fillStyle="white";
-        ctx.font="26px Arial";
-        ctx.fillText("Score: "+score, 10,30);
+        ctx.font="28px Arial";
+        ctx.fillText(score, 20,40);
 
         requestAnimationFrame(loop);
     }
     loop();
 }
 
-function die(){
-    gameOver = true;
-    if(bgMusic.src) bgMusic.pause();
-    if(deathMusic.src) deathMusic.play();
+function triggerDeath(){
+    isGameOver = true;
+    if(sounds.bg.src) sounds.bg.pause();
+    if(sounds.death.src) sounds.death.play();
 }
 
-function drawGameOver(msg){
-    ctx.fillStyle="rgba(0,0,0,0.65)";
+function drawGameOver(t){
+    ctx.fillStyle="rgba(0,0,0,0.75)";
     ctx.fillRect(0,0,360,600);
 
-    if(goImg.src) {
-        let w = 200, h = 200;
-        ctx.drawImage(goImg, 80,150,w,h);
-    } else {
-        ctx.fillStyle="white";
-        ctx.font="26px Arial";
-        ctx.fillText(msg, 100,260);
-    }
+    ctx.fillStyle="#fff";
+    ctx.font="34px Arial";
+    ctx.fillText(score, 170,100);
 
-    ctx.font="18px Arial";
-    ctx.fillText("Tap To Restart", 110,360);
+    let textY = 270;
+    if(images.goImg.src) ctx.drawImage(images.goImg,80,150,200,200);
+    else { ctx.fillText(t,100,240); textY = 310; }
 
-    canvas.onclick = ()=> location.reload();
+    ctx.font="20px Arial";
+    ctx.fillText("RESTART",135,textY+60);
+
+    canvas.onclick = ()=>location.reload();
 }
 </script>
+
 </body>
 </html>
