@@ -1,95 +1,567 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Bro Game Maker</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Floppy F4ck — Game Maker</title>
 <style>
-    body { font-family: Arial, sans-serif; background: #111; color: #fff; margin: 0; padding: 0; }
-    #editor { width: 100%; height: 200px; background: #222; color: #0f0; border: none; padding: 10px; outline: none; }
-    #canvasContainer { text-align: center; margin-top: 10px; }
-    canvas { background: #000; border: 2px solid #0f0; }
-    button { background: #0f0; color: #000; padding: 10px; border: none; cursor: pointer; margin: 5px; }
-    button:hover { opacity: 0.7; }
+  :root{
+    --bg:#0b0b0b; --panel:#111; --accent:#11dd77; --muted:#9aa;
+  }
+  html,body{height:100%;margin:0;background:var(--bg);color:#fff;font-family:Inter,system-ui,Arial;border:0}
+  .wrap{max-width:980px;margin:18px auto;padding:16px}
+  header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  h1{margin:0;font-size:20px;letter-spacing:0.6px}
+  .subtitle{color:var(--muted);font-size:13px}
+  .panel{background:var(--panel);border-radius:10px;padding:14px;margin-top:14px;box-shadow:0 6px 18px rgba(0,0,0,0.6)}
+  label{display:block;font-size:13px;color:var(--muted);margin:8px 0 6px}
+  input[type="text"], input[type="file"], input[type="number"], select, textarea{
+    width:100%;box-sizing:border-box;padding:8px;border-radius:8px;border:1px solid #222;background:#0d0d0d;color:#fff;font-size:14px;
+  }
+  .row{display:flex;gap:10px;flex-wrap:wrap}
+  .col{flex:1;min-width:160px}
+  button{background:var(--accent);border:none;color:#041; font-weight:700;padding:10px 12px;border-radius:8px;cursor:pointer}
+  button.ghost{background:transparent;border:1px solid #333;color:var(--muted)}
+  .hint{font-size:12px;color:var(--muted);margin-top:6px}
+  #linkBox{display:flex;gap:8px;align-items:center}
+  #shareInput{background:#0c0c0c;padding:8px;border-radius:8px;border:1px solid #222;color:#ddd;flex:1}
+  canvas{display:block;margin:12px auto;border:4px solid #0b0b0b;border-radius:8px;background:#000;width:100%;height:auto;max-height:60vh}
+  .center{text-align:center}
+  .small{font-size:12px;color:var(--muted)}
+  footer{margin-top:20px;color:var(--muted);font-size:12px;text-align:center}
+  @media(min-width:880px){ h1{font-size:22px} }
 </style>
 </head>
 <body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>Floppy F4ck — Game Maker</h1>
+        <div class="subtitle">Create a Flappy-style game, upload your own images & sounds, share the link — no sign-in, no backend.</div>
+      </div>
+      <div class="small">Deploy-ready • Mobile-first</div>
+    </header>
 
-<h2 style="text-align:center;">BRO GAME MAKER 🔥</h2>
-<div style="padding:20px;">
-    
-    <textarea id="editor">// Example Game Script
+    <!-- Creator UI -->
+    <div id="creatorView" class="panel" aria-hidden="false">
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap">
+        <div style="flex:1;min-width:260px">
+          <label>Game Name (used in link)</label>
+          <input id="gameName" type="text" placeholder="example: BroFly" />
+          <div class="hint">Lowercase letters/numbers/hyphen only. If empty, random id will be used.</div>
+        </div>
+        <div style="min-width:160px">
+          <label>Preview Size</label>
+          <select id="previewSize">
+            <option value="small">Small (mobile)</option>
+            <option value="medium" selected>Medium</option>
+            <option value="large">Large</option>
+          </select>
+        </div>
+      </div>
 
-player.x = 50
-player.y = 50
+      <div class="panel" style="margin-top:12px;background:#0d0d0d;padding:10px">
+        <label>Player (character image) — PNG/JPG</label>
+        <input id="playerFile" type="file" accept="image/*" />
+        <label>Obstacle image (pipe/spike) — PNG/JPG</label>
+        <input id="obstFile" type="file" accept="image/*" />
+        <label>Background image (optional)</label>
+        <input id="bgFile" type="file" accept="image/*" />
+        <div class="row" style="margin-top:10px">
+          <div class="col">
+            <label>In-game BGM (mp3)</label>
+            <input id="bgmFile" type="file" accept="audio/*" />
+          </div>
+          <div class="col">
+            <label>Game-over sound (mp3)</label>
+            <input id="deadFile" type="file" accept="audio/*" />
+          </div>
+        </div>
 
-onStart(() => {
-  log("Game started bro!")
-})
+        <label>Game Over Image (PNG/JPG)</label>
+        <input id="gameOverImage" type="file" accept="image/*" />
+        <label>Game Over Text</label>
+        <input id="gameOverText" type="text" placeholder="You lost! Try again, champ." />
 
-onUpdate(() => {
-  if (keyDown('ArrowRight')) player.x += 2
-  if (keyDown('ArrowLeft')) player.x -= 2
-  if (keyDown('ArrowUp')) player.y -= 2
-  if (keyDown('ArrowDown')) player.y += 2
-})
-    </textarea>
+        <div class="row" style="margin-top:12px;align-items:center">
+          <div style="flex:1">
+            <label>Game difficulty (gravity / jump)</label>
+            <div style="display:flex;gap:8px">
+              <input id="gravity" type="number" min="0.1" step="0.1" value="0.55" style="width:120px" />
+              <input id="jumpStrength" type="number" min="4" step="0.5" value="9" style="width:120px" />
+              <input id="pipeSpeed" type="number" min="1" step="0.5" value="2.6" style="width:120px" />
+            </div>
+            <div class="hint">Tweak gravity, jump strength and pipe speed. Lower gravity = floatier. Higher pipe speed = harder.</div>
+          </div>
+          <div style="min-width:180px">
+            <label>Spawn gap (px)</label>
+            <input id="pipeGap" type="number" min="80" step="5" value="150" />
+          </div>
+        </div>
 
-    <button onclick="runGame()">RUN GAME</button>
-    <button onclick="location.reload()">RESET</button>
+        <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+          <button id="generateBtn">Generate Game</button>
+          <button id="testBtn" class="ghost">Preview in-place</button>
+          <button id="clearBtn" class="ghost">Clear saved games</button>
+        </div>
 
-    <div id="canvasContainer">
-        <canvas id="gameCanvas" width="500" height="300"></canvas>
+        <div style="margin-top:12px">
+          <div class="hint">When you click Generate Game — all files are converted to base64 and stored in localStorage under your <strong>game id</strong>. The app will redirect you to the playable URL like: <code>?id=&lt;gameId&gt;</code>. Copy & share that link.</div>
+        </div>
+
+        <div id="linkArea" style="display:none;margin-top:12px" class="center">
+          <div id="linkBox" style="max-width:860px;margin:auto">
+            <input id="shareInput" readonly />
+            <button id="copyLink">Copy</button>
+          </div>
+        </div>
+      </div>
     </div>
-</div>
+
+    <!-- Canvas preview / gameplay container -->
+    <div id="gameView" class="panel" style="display:none">
+      <div class="center">
+        <div id="statusBar" class="small"></div>
+        <canvas id="gameCanvas"></canvas>
+        <div id="hud" style="margin-top:10px" class="center">
+          <div id="scoreDisplay" style="font-size:20px;font-weight:700"></div>
+          <div id="message" class="small"></div>
+          <div style="margin-top:8px">
+            <button id="restartBtn" style="display:none">Restart</button>
+            <button id="backBtn" class="ghost">Back to Creator</button>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:10px" class="center small">Tap the screen to fly • Works on Android Chrome</div>
+    </div>
+
+    <footer class="small">Built for speed + virality. Save your asset sizes — huge base64 blobs may slow older phones.</footer>
+  </div>
 
 <script>
-let ctx, player = {x:0, y:0}, keys = {};
-let startCallbacks = [], updateCallbacks = [];
-let gameRunning = false;
+/*
+  Floppy F4ck — Single-file Game Maker
+  - Save as index.html
+  - Deploy to Netlify/Vercel (drop file at root)
+  - No backend. Uses localStorage for configs.
+  - Query param: ?id=<gameId> to play
+*/
 
-function onStart(cb) { startCallbacks.push(cb); }
-function onUpdate(cb) { updateCallbacks.push(cb); }
-function log(msg) { console.log("%c" + msg, "color: #0f0"); }
+/* --------------------------
+   Utilities
+   -------------------------- */
+function $(id){return document.getElementById(id)}
+function readFileAsDataURL(file){ return new Promise((res,rej)=>{
+  if(!file){res(null);return;}
+  const r=new FileReader();
+  r.onload=()=>res(r.result);
+  r.onerror=err=>rej(err);
+  r.readAsDataURL(file);
+})}
+function randId(len=6){const s="abcdefghijklmnopqrstuvwxyz0123456789";let r="";for(let i=0;i<len;i++)r+=s[Math.floor(Math.random()*s.length)];return r}
+function sanitizeName(n){ if(!n) return ""; return n.toLowerCase().replace(/[^a-z0-9\-]/g,'').slice(0,40); }
 
-function keyDown(key) { return keys[key] === true; }
+/* --------------------------
+   DOM refs
+   -------------------------- */
+const creatorView = $('creatorView'), gameView = $('gameView');
+const generateBtn = $('generateBtn'), testBtn = $('testBtn'), clearBtn = $('clearBtn');
+const copyLinkBtn = $('copyLink'), shareInput = $('shareInput'), linkArea = $('linkArea');
+const backBtn = $('backBtn'), restartBtn = $('restartBtn');
+const playerFile = $('playerFile'), obstFile = $('obstFile'), bgFile = $('bgFile');
+const bgmFile = $('bgmFile'), deadFile = $('deadFile'), gameOverImage = $('gameOverImage');
+const gameOverText = $('gameOverText'), gameNameInput = $('gameName');
+const gravityInput = $('gravity'), jumpInput = $('jumpStrength'), pipeSpeedInput = $('pipeSpeed'), pipeGapInput = $('pipeGap');
+const previewSize = $('previewSize');
+const canvas = $('gameCanvas'), ctx = canvas.getContext('2d');
+const scoreDisplay = $('scoreDisplay'), message = $('message'), statusBar = $('statusBar');
 
-document.addEventListener("keydown", e => keys[e.key] = true);
-document.addEventListener("keyup", e => keys[e.key] = false);
-
-function runCode(code) {
-    startCallbacks = [];
-    updateCallbacks = [];
-    new Function(code)();
+/* --------------------------
+   Storage
+   -------------------------- */
+const STORAGE_PREFIX = "floppy_game_";
+function saveConfig(id, obj){
+  try{ localStorage.setItem(STORAGE_PREFIX + id, JSON.stringify(obj)); return true }
+  catch(e){ console.error("save failed",e); return false }
+}
+function loadConfig(id){
+  try{ const v = localStorage.getItem(STORAGE_PREFIX + id); return v?JSON.parse(v):null }
+  catch(e){return null}
+}
+function clearAllConfigs(){
+  Object.keys(localStorage).forEach(k=>{
+    if(k.startsWith(STORAGE_PREFIX)) localStorage.removeItem(k);
+  });
 }
 
-function startGame() {
-    startCallbacks.forEach(cb => cb());
-    gameRunning = true;
-    gameLoop();
+/* --------------------------
+   Creator actions
+   -------------------------- */
+generateBtn.addEventListener('click', async ()=>{
+  generateBtn.disabled = true; generateBtn.textContent = "Generating...";
+  const p = await readFileAsDataURL(playerFile.files[0]);
+  const o = await readFileAsDataURL(obstFile.files[0]);
+  const bg = await readFileAsDataURL(bgFile.files[0]);
+  const bgm = await readFileAsDataURL(bgmFile.files[0]);
+  const dead = await readFileAsDataURL(deadFile.files[0]);
+  const goImg = await readFileAsDataURL(gameOverImage.files[0]);
+  const goText = gameOverText.value || "You lost!";
+  let id = sanitizeName(gameNameInput.value) || randId(7);
+  // Ensure unique if name chosen and key exists, append number
+  if(loadConfig(id)){
+    let i=1; while(loadConfig(id + i)) i++; id = id + i;
+  }
+
+  const config = {
+    id, created: Date.now(),
+    player:p, obstacle:o, background:bg,
+    bgm, dead, gameOverImage:goImg, gameOverText:goText,
+    gravity:parseFloat(gravityInput.value)||0.5,
+    jump:parseFloat(jumpInput.value)||8.5,
+    pipeSpeed:parseFloat(pipeSpeedInput.value)||2.4,
+    pipeGap:parseInt(pipeGapInput.value)||150
+  };
+
+  const ok = saveConfig(id, config);
+  generateBtn.disabled = false; generateBtn.textContent = "Generate Game";
+  if(!ok){ alert("Failed to save — storage error (maybe quota)"); return; }
+
+  // Show link
+  const url = location.origin + location.pathname + "?id=" + encodeURIComponent(id);
+  shareInput.value = url;
+  linkArea.style.display = "block";
+  copyLinkBtn.focus();
+  // redirect user to play page
+  setTimeout(()=>{ location.href = url }, 700);
+});
+
+testBtn.addEventListener('click', async ()=>{
+  // Create temporary config and preview the game in-place (no redirect)
+  const p = await readFileAsDataURL(playerFile.files[0]);
+  const o = await readFileAsDataURL(obstFile.files[0]);
+  if(!p || !o) { alert("Upload player and obstacle to preview"); return; }
+  const cfg = {
+    player:p, obstacle:o, background: await readFileAsDataURL(bgFile.files[0]),
+    bgm: await readFileAsDataURL(bgmFile.files[0]),
+    dead: await readFileAsDataURL(deadFile.files[0]),
+    gameOverImage: await readFileAsDataURL(gameOverImage.files[0]),
+    gameOverText: gameOverText.value || "You lost!",
+    gravity:parseFloat(gravityInput.value)||0.5,
+    jump:parseFloat(jumpInput.value)||8.5,
+    pipeSpeed:parseFloat(pipeSpeedInput.value)||2.4,
+    pipeGap:parseInt(pipeGapInput.value)||150
+  };
+  // render preview by starting the game with temporary config
+  showGameView(cfg, true);
+});
+
+clearBtn.addEventListener('click', ()=>{
+  if(!confirm("Clear all saved Floppy game configs in localStorage?")) return;
+  clearAllConfigs();
+  alert("Cleared.");
+});
+
+copyLinkBtn.addEventListener('click', ()=>{
+  shareInput.select();
+  document.execCommand('copy');
+  copyLinkBtn.textContent = "Copied!";
+  setTimeout(()=>copyLinkBtn.textContent = "Copy",1100);
+});
+
+/* --------------------------
+   Routing: check query param ?id=
+   -------------------------- */
+function getQueryParam(name){
+  const params = new URLSearchParams(location.search);
+  return params.get(name);
+}
+const playId = getQueryParam('id');
+if(playId){
+  // load config and show gameplay
+  const cfg = loadConfig(playId);
+  if(!cfg){
+    // nothing found -> show friendly error with option to go back
+    creatorView.style.display = 'none';
+    gameView.style.display = 'block';
+    statusBar.textContent = "Game not found. Maybe the creator didn't 'Generate' properly. Go back to create your own.";
+    $('backBtn').style.display = 'inline-block';
+    $('restartBtn').style.display = 'none';
+  } else {
+    showGameView(cfg, false);
+  }
+} else {
+  // Show creator by default
+  creatorView.style.display = 'block';
+  gameView.style.display = 'none';
 }
 
-function gameLoop() {
-    if (!gameRunning) return;
-    
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    updateCallbacks.forEach(cb => cb());
-    
-    ctx.fillStyle = "red";
-    ctx.fillRect(player.x, player.y, 30, 30);
+/* --------------------------
+   Core game logic (Flappy clone)
+   - showGameView(cfg, isPreview)
+   -------------------------- */
+let gameState = {};
+function showGameView(cfg, isPreview){
+  // UI
+  creatorView.style.display = 'none';
+  gameView.style.display = 'block';
+  linkArea.style.display = 'none';
+  statusBar.textContent = isPreview ? "Preview mode — not saved" : ("Playing: " + (cfg.id || "temporary"));
+  $('backBtn').style.display = 'inline-block';
 
-    requestAnimationFrame(gameLoop);
+  // Setup canvas size based on previewSize
+  function resizeCanvas(){
+    const w = Math.min(window.innerWidth - 28, 900);
+    let h = Math.round(w * 0.55);
+    if(previewSize.value === "small") h = Math.round(w * 0.65);
+    if(previewSize.value === "large") h = Math.round(w * 0.5);
+    canvas.width = Math.max(320, Math.round(w));
+    canvas.height = Math.max(240, h);
+  }
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
+
+  // Load assets (base64 or null)
+  const assets = {
+    playerSrc: cfg.player || null,
+    obstSrc: cfg.obstacle || cfg.obstacleImage || cfg.obst || null,
+    bgSrc: cfg.background || null,
+    bgmSrc: cfg.bgm || null,
+    deadSrc: cfg.dead || null,
+    gameOverImage: cfg.gameOverImage || null,
+    gameOverText: cfg.gameOverText || "You lost!",
+    gravity: cfg.gravity || 0.55,
+    jump: cfg.jump || 9,
+    pipeSpeed: cfg.pipeSpeed || 2.6,
+    pipeGap: cfg.pipeGap || 150
+  };
+
+  // Build Image objects if available
+  const PLAYER_IMG = new Image();
+  const OBST_IMG = new Image();
+  const BG_IMG = new Image();
+  const GO_IMG = new Image();
+  let bgmAudio = null, deadAudio = null;
+
+  if(assets.playerSrc) PLAYER_IMG.src = assets.playerSrc;
+  if(assets.obstSrc) OBST_IMG.src = assets.obstSrc;
+  if(assets.bgSrc) BG_IMG.src = assets.bgSrc;
+  if(assets.gameOverImage) GO_IMG.src = assets.gameOverImage;
+
+  if(assets.bgmSrc){ bgmAudio = new Audio(assets.bgmSrc); bgmAudio.loop = true; bgmAudio.preload = 'auto' }
+  if(assets.deadSrc){ deadAudio = new Audio(assets.deadSrc); deadAudio.preload = 'auto' }
+
+  // Internal state
+  gameState = {
+    player: { x: Math.round(canvas.width * 0.25), y: canvas.height/2, w: 48, h: 48, vy:0 },
+    pipes: [],
+    score: 0,
+    running: false,
+    stuck: false
+  };
+
+  // Set player size based on canvas and player image ratio
+  PLAYER_IMG.onload = ()=> {
+    // scale to ~10% width
+    const desiredW = Math.round(canvas.width * 0.11);
+    const ratio = PLAYER_IMG.naturalHeight ? (PLAYER_IMG.naturalHeight/PLAYER_IMG.naturalWidth) : 1;
+    gameState.player.w = desiredW;
+    gameState.player.h = Math.round(desiredW * ratio);
+    // center vertically
+    gameState.player.y = canvas.height/2 - gameState.player.h/2;
+  };
+  OBST_IMG.onload = ()=>{/* nothing special */}
+
+  // If images not provided, fallback to shapes
+  const gravity = assets.gravity;
+  const jumpStrength = assets.jump;
+  const pipeSpeed = assets.pipeSpeed;
+  const pipeGap = assets.pipeGap;
+
+  // Pipe spawn control
+  let spawnTimer = 0;
+  const spawnInterval = Math.max(80, Math.round(150 - (pipeSpeed*8))); // frames
+
+  // Controls
+  function flap(){
+    if(!gameState.running) startRun();
+    gameState.player.vy = -Math.abs(jumpStrength);
+  }
+  // Touch & click
+  canvas.addEventListener('touchstart', (e)=>{ e.preventDefault(); flap(); }, {passive:false});
+  canvas.addEventListener('mousedown', (e)=>{ flap(); });
+
+  // Keyboard
+  window.addEventListener('keydown', (e)=>{
+    if(e.code === 'Space' || e.code === 'ArrowUp') { e.preventDefault(); flap(); }
+    if(e.key === 'r' || e.key === 'R') restart();
+  });
+
+  // Game loop
+  let raf = null;
+  function startRun(){
+    if(gameState.running) return;
+    gameState.running = true;
+    gameState.score = 0;
+    spawnTimer = 0;
+    gameState.pipes = [];
+    gameState.player.vy = -Math.abs(jumpStrength/2);
+    // Start music
+    try{ if(bgmAudio) { bgmAudio.currentTime = 0; bgmAudio.play().catch(()=>{}); } } catch(e){}
+    tick();
+  }
+
+  function stopRun(){
+    gameState.running = false;
+    // stop bgm
+    try{ if(bgmAudio){ bgmAudio.pause(); bgmAudio.currentTime = 0; } }catch(e){}
+  }
+
+  function restart(){
+    // reset player position & restart
+    gameState.player.y = canvas.height/2 - gameState.player.h/2;
+    gameState.player.vy = 0;
+    gameState.score = 0;
+    gameState.pipes = [];
+    spawnTimer = 0;
+    $('restartBtn').style.display = 'none';
+    message.textContent = '';
+    statusBar.textContent = "Playing...";
+    startRun();
+  }
+
+  function tick(){
+    // main loop
+    update();
+    render();
+    if(gameState.running) raf = requestAnimationFrame(tick);
+  }
+
+  function update(){
+    // physics
+    gameState.player.vy += gravity;
+    gameState.player.y += gameState.player.vy;
+
+    // spawn pipes
+    spawnTimer++;
+    if(spawnTimer > spawnInterval){
+      spawnTimer = 0;
+      spawnPipe();
+    }
+
+    // move pipes
+    for(let i=gameState.pipes.length-1;i>=0;i--){
+      const p = gameState.pipes[i];
+      p.x -= pipeSpeed;
+      // scored when pipe passes player
+      if(!p.passed && (p.x + p.w) < gameState.player.x){
+        p.passed = true;
+        gameState.score++;
+        scoreDisplay.textContent = gameState.score;
+      }
+      if(p.x + p.w < -50) gameState.pipes.splice(i,1);
+    }
+
+    // collisions
+    if(gameState.player.y + gameState.player.h > canvas.height){ // hit ground
+      return die();
+    }
+    if(gameState.player.y < -50){ // flew too high (optional)
+      gameState.player.y = -40; gameState.player.vy = 0;
+    }
+
+    for(const p of gameState.pipes){
+      if(rectIntersect(gameState.player.x, gameState.player.y, gameState.player.w, gameState.player.h, p.x, p.y, p.w, p.h)){
+        return die();
+      }
+    }
+  }
+
+  function spawnPipe(){
+    const w = Math.round(canvas.width * 0.18);
+    const gap = Math.max(80, Math.min(pipeGap, canvas.height - 80));
+    // random top opening
+    const topH = Math.round(80 + Math.random()*(canvas.height - gap - 160));
+    const bottomY = topH + gap;
+    // top piece (flipped)
+    gameState.pipes.push({ x: canvas.width + 20, y: 0, w, h: topH, top:true, passed:false });
+    // bottom piece
+    gameState.pipes.push({ x: canvas.width + 20, y: bottomY, w, h: canvas.height - bottomY, top:false, passed:false });
+  }
+
+  function rectIntersect(x1,y1,w1,h1,x2,y2,w2,h2){
+    return !(x2 > x1 + w1 || x2 + w2 < x1 || y2 > y1 + h1 || y2 + h2 < y1);
+  }
+
+  function die(){
+    if(!gameState.running) return;
+    stopRun();
+    // play dead sound
+    try{ if(deadAudio){ deadAudio.currentTime = 0; deadAudio.play().catch(()=>{}); } }catch(e){}
+    // show game over image/text
+    message.textContent = assets.gameOverText || "You lost!";
+    if(GO_IMG.src){
+      // draw once at center on top of canvas
+      ctx.drawImage(GO_IMG, (canvas.width - Math.min(canvas.width*0.6, GO_IMG.width))/2, (canvas.height - Math.min(canvas.height*0.4, GO_IMG.height))/2, Math.min(canvas.width*0.6, GO_IMG.width), Math.min(canvas.height*0.4, GO_IMG.height));
+    }
+    $('restartBtn').style.display = 'inline-block';
+    statusBar.textContent = "Game Over — Score: " + gameState.score;
+  }
+
+  function render(){
+    // background
+    if(BG_IMG.src && BG_IMG.complete){
+      // cover
+      const scale = Math.max(canvas.width / BG_IMG.naturalWidth, canvas.height / BG_IMG.naturalHeight);
+      const bw = BG_IMG.naturalWidth * scale, bh = BG_IMG.naturalHeight * scale;
+      ctx.drawImage(BG_IMG, 0, 0, BG_IMG.naturalWidth, BG_IMG.naturalHeight, 0, 0, canvas.width, canvas.height);
+    } else {
+      ctx.fillStyle = "#001018";
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+    }
+
+    // pipes
+    for(const p of gameState.pipes){
+      if(OBST_IMG.src && OBST_IMG.complete){
+        // draw obstacle image stretched to p.w x p.h
+        ctx.save();
+        if(p.top){
+          // flip vertically for top
+          ctx.translate(p.x + p.w/2, p.y + p.h/2);
+          ctx.scale(1,-1);
+          ctx.drawImage(OBST_IMG, -p.w/2, -p.h/2, p.w, p.h);
+          ctx.restore();
+        } else {
+          ctx.drawImage(OBST_IMG, p.x, p.y, p.w, p.h);
+        }
+      } else {
+        ctx.fillStyle = "#b33";
+        ctx.fillRect(p.x, p.y, p.w, p.h);
+      }
+    }
+
+    // player
+    if(PLAYER_IMG.src && PLAYER_IMG.complete){
+      ctx.drawImage(PLAYER_IMG, gameState.player.x, gameState.player.y, gameState.player.w, gameState.player.h);
+    } else {
+      ctx.fillStyle = "#ffcc00";
+      ctx.fillRect(gameState.player.x, gameState.player.y, gameState.player.w, gameState.player.h);
+    }
+  }
+
+  // start the game automatically on initial press or on 1st interaction
+  // Show restart button hidden initially
+  $('restartBtn').style.display = 'none';
+  restartBtn.onclick = restart;
+  backBtn.onclick = ()=>{ location.href = location.pathname; };
+
+  // show a "tap to start" overlay for first run
+  statusBar.textContent = "Tap canvas to start";
 }
 
-function runGame() {
-    const canvas = document.getElementById("gameCanvas");
-    ctx = canvas.getContext("2d");
-
-    let code = document.getElementById("editor").value;
-    runCode(code);
-    startGame();
-}
-
+/* --------------------------
+   Small safety / tips for user
+   -------------------------- */
+window.addEventListener('error', (e)=> console.error("Runtime error", e));
 </script>
 </body>
 </html>
