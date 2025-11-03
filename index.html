@@ -90,18 +90,10 @@
   </div>
 
 <script>
-/* FINAL WORKING Flappy-style generator
-   - Proper physics (time-step integration)
-   - Restart = respawn in-game (no reload)
-   - Score works
-   - Game-over image + text
-   - Audio plays after first user gesture
-   - Scales uploaded images sensibly
-*/
+const API_BASE = "https://floppy-production.up.railway.app";
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
-
 const creator = document.getElementById('creator');
 const overlayTop = document.getElementById('overlayTop');
 const scoreBox = document.getElementById('scoreBox');
@@ -116,377 +108,167 @@ const bgmFile = document.getElementById('bgmFile');
 const deadFile = document.getElementById('deadFile');
 const goFile = document.getElementById('goFile');
 const goTextInput = document.getElementById('goText');
-
 const genBtn = document.getElementById('genBtn');
 const previewBtn = document.getElementById('previewBtn');
 const restartBtn = document.getElementById('restartBtn');
 const menuBtn = document.getElementById('menuBtn');
 const backBtn = document.getElementById('backBtn');
+const saveBtn = document.getElementById('saveBtn');
 
 let images = { player: new Image(), pipe: new Image(), bg: new Image(), go: new Image() };
 let sounds = { bgm: null, dead: null };
+let state = null;
+let lastTime = 0;
+let rafId = null;
+let startedAudio = false;
 
-let state = null;          // holds runtime state
-let lastTime = 0;          // for dt
-let startedAudio = false;  // to satisfy autoplay policies
-
-// PHYSICS tuned to feel like Flappy Bird (stable)
 const PHYS = {
-  gravity: 1000,      // px/s^2
-  flapV: -320,        // px/s
-  maxFall: 900,       // px/s
-  pipeSpeedBase: 140, // px/s initial
-  pipeAccel: 0.02,    // incremental accel
-  gap: 180,           // px
-  spawnInterval: 1.6, // seconds
+  gravity: 1000,
+  flapV: -320,
+  maxFall: 900,
+  pipeSpeedBase: 140,
+  pipeAccel: 0.02,
+  gap: 180,
+  spawnInterval: 1.6,
   playerX: 90,
   playerWidthRatio: 0.14
 };
 
-// utility: read file as dataURL
-function fileToDataURL(file){
+function fitCanvas(){
+  canvas.style.display = "block";
+  canvas.width = 360;
+  canvas.height = 640;
+}
+
+function fileToURL(file){
   return new Promise(res => {
     if(!file){ res(null); return; }
     const r = new FileReader();
     r.onload = ()=> res(r.result);
-    r.onerror = ()=> res(null);
     r.readAsDataURL(file);
   });
 }
 
-// responsive canvas sizing
-function fitCanvas(){
-  const vw = Math.min(window.innerWidth - 24, 420);
-  canvas.width = Math.max(320, vw);
-  canvas.height = Math.max(560, Math.round(window.innerHeight - 140));
-}
-window.addEventListener('resize', fitCanvas);
-
-// initialize state object
-function makeState(overText){
-  const w = canvas.width, h = canvas.height;
-  const pw = Math.max(28, Math.round(w * PHYS.playerWidthRatio));
-  const ph = Math.max(28, Math.round(pw * (images.player.naturalHeight || 1) / (images.player.naturalWidth || pw)));
+function makeState(goText){
   return {
-    player: { x: PHYS.playerX, y: Math.round(h/2 - ph/2), w: pw, h: ph, vy: 0 },
-    pipes: [],        // list of rects {x,y,w,h,top,pairId,passed}
-    pipeSpeed: PHYS.pipeSpeedBase,
-    gap: PHYS.gap,
-    lastSpawn: 0,
-    spawnInterval: PHYS.spawnInterval,
-    score: 0,
-    running: true,
+    goText,
+    pipes: [],
+    player: { x: PHYS.playerX, y: 250, vy: 0 },
     dead: false,
-    goText: overText || 'You lost!',
+    tSpawn: 0,
+    pipeSpeed: PHYS.pipeSpeedBase,
+    score: 0
   };
 }
 
-// spawn a pipe pair
-function spawnPair(s){
-  const h = canvas.height;
-  const minTop = 40;
-  const maxTop = Math.max(80, h - s.gap - 120);
-  const topH = minTop + Math.floor(Math.random() * (Math.max(0, maxTop - minTop) + 1));
-  const x = canvas.width + 20;
-  const w = Math.max(40, Math.round(canvas.width * 0.16));
-  const id = Date.now() + Math.random();
-  s.pipes.push({ x, y: 0, w, h: topH, top: true, pairId: id, passed: false });
-  s.pipes.push({ x, y: topH + s.gap, w, h: h - (topH + s.gap), top: false, pairId: id, passed: false });
+function reset(){
+  state = makeState(goTextInput.value || "Game Over!");
+  goImgWrap.innerHTML = "";
+  goTextShow.textContent = "";
+  scoreBox.textContent = "0";
+  gameOverUI.style.display = "none";
+  state.dead = false;
+  state.score = 0;
 }
 
-// AABB collision
-function aabb(ax,ay,aw,ah, bx,by,bw,bh){
-  return !(bx > ax + aw || bx + bw < ax || by > ay + ah || by + bh < ay);
+function die(){
+  state.dead = true;
+  if(sounds.bgm){
+    try{sounds.bgm.pause();}catch(e){}
+  }
+  if(sounds.dead){
+    try{sounds.dead.play();}catch(e){}
+  }
+  goTextShow.textContent = state.goText;
+  gameOverUI.style.display = "flex";
 }
 
-// update with dt (seconds)
-function update(dt){
-  if(!state || state.dead) return;
-
-  // physics
-  state.player.vy += PHYS.gravity * dt;
-  if(state.player.vy > PHYS.maxFall) state.player.vy = PHYS.maxFall;
-  state.player.y += state.player.vy * dt;
-
-  // spawn
-  state.lastSpawn += dt;
-  if(state.lastSpawn >= state.spawnInterval){
-    state.lastSpawn = 0;
-    spawnPair(state);
-  }
-
-  // move pipes and scoring
-  for(let i = state.pipes.length - 1; i >= 0; i--){
-    const p = state.pipes[i];
-    p.x -= state.pipeSpeed * dt;
-    if(p.top && !p.passed && (p.x + p.w) < state.player.x){
-      state.score++;
-      p.passed = true;
-      // mark other pipe of same pair
-      for(const q of state.pipes) if(q.pairId === p.pairId) q.passed = true;
-      scoreBox.textContent = state.score;
-    }
-    if(p.x + p.w < -50) state.pipes.splice(i,1);
-  }
-
-  // collisions
-  if(state.player.y + state.player.h > canvas.height || state.player.y < 0){
-    triggerDeath();
-    return;
-  }
-  for(const p of state.pipes){
-    if(aabb(state.player.x, state.player.y, state.player.w, state.player.h, p.x, p.y, p.w, p.h)){
-      triggerDeath();
-      return;
-    }
-  }
-
-  // gentle difficulty ramp
-  state.pipeSpeed += PHYS.pipeAccel * dt;
-  // tiny gap shrink over long time (negligible per second)
-  if(state.gap > 110) state.gap -= 0.01 * dt;
-}
-
-// render everything
-function render(){
-  if(!state) return;
-  ctx.clearRect(0,0,canvas.width, canvas.height);
-
-  // background
-  if(images.bg.src && images.bg.complete){
-    ctx.drawImage(images.bg, 0, 0, images.bg.naturalWidth, images.bg.naturalHeight, 0, 0, canvas.width, canvas.height);
-  } else {
-    ctx.fillStyle = "#071018";
-    ctx.fillRect(0,0,canvas.width, canvas.height);
-  }
-
-  // pipes
-  for(const p of state.pipes){
-    if(images.pipe.src && images.pipe.complete){
-      if(p.top){
-        ctx.save();
-        ctx.translate(p.x + p.w/2, p.y + p.h/2);
-        ctx.scale(1,-1);
-        ctx.drawImage(images.pipe, -p.w/2, -p.h/2, p.w, p.h);
-        ctx.restore();
-      } else {
-        ctx.drawImage(images.pipe, p.x, p.y, p.w, p.h);
-      }
-    } else {
-      ctx.fillStyle = "#AA4422";
-      ctx.fillRect(p.x, p.y, p.w, p.h);
-    }
-  }
-
-  // player
-  if(images.player.src && images.player.complete){
-    ctx.drawImage(images.player, state.player.x, state.player.y, state.player.w, state.player.h);
-  } else {
-    ctx.fillStyle = "#FFD92E";
-    ctx.fillRect(state.player.x, state.player.y, state.player.w, state.player.h);
-  }
-}
-
-// main loop
-let rafId = null;
 function loop(ts){
-  if(!lastTime) lastTime = ts;
-  const dt = Math.min(0.05, (ts - lastTime) / 1000);
+  if(!state){ return rafId = requestAnimationFrame(loop); }
+
+  const dt = (ts-lastTime)/1000;
   lastTime = ts;
 
-  if(state && state.running && !state.dead) update(dt);
-  if(state) render();
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  if(images.bg.src) ctx.drawImage(images.bg,0,0,canvas.width,canvas.height);
+
+  if(!state.dead){
+    state.player.vy += PHYS.gravity * dt;
+    state.player.vy = Math.min(state.player.vy, PHYS.maxFall);
+    state.player.y += state.player.vy * dt;
+
+    state.tSpawn += dt;
+    if(state.tSpawn >= PHYS.spawnInterval){
+      state.tSpawn = 0;
+      const top = Math.random()*200+60;
+      state.pipes.push({x:canvas.width, top});
+    }
+
+    state.pipeSpeed += PHYS.pipeAccel;
+  }
+
+  for(const p of state.pipes){
+    if(!state.dead) p.x -= state.pipeSpeed * dt;
+    ctx.drawImage(images.pipe,p.x,0,60,p.top);
+    ctx.drawImage(images.pipe,p.x,p.top+PHYS.gap,60,canvas.height-p.top-PHYS.gap);
+
+    if(
+      state.player.x+40>p.x &&
+      state.player.x<p.x+60 &&
+      (state.player.y<p.top || state.player.y+40>p.top+PHYS.gap)
+    ) die();
+
+    if(p.x+60 < state.player.x && !p.scored){
+      p.scored=true;
+      state.score++;
+      scoreBox.textContent=state.score;
+    }
+  }
+
+  if(state.player.y>canvas.height-40 || state.player.y<0) die();
+
+  ctx.drawImage(images.player,state.player.x,state.player.y,40,40);
+
   rafId = requestAnimationFrame(loop);
 }
 
-// trigger death
-function triggerDeath(){
-  if(!state || state.dead) return;
-  state.dead = true;
-  state.running = false;
-  // stop bg music
-  if(sounds.bgm){
-    try {
-      sounds.bgm.pause();
-      sounds.bgm.currentTime = 0;
-    } catch(e){}
-  }
-  // play death sound
-  if(sounds.dead && sounds.dead.src){
-    try {
-      sounds.dead.pause();
-      sounds.dead.currentTime = 0;
-      sounds.dead.play().catch(()=>{});
-    } catch(e){}
-  }
-  showGameOver();
-}
-
-// show/hide UI
-function showGameOver(){
-  // populate image and text
-  goImgWrap.innerHTML = '';
-  if(images.go.src){
-    const img = document.createElement('img');
-    img.src = images.go.src;
-    img.style.maxWidth = '220px';
-    img.style.borderRadius = '8px';
-    goImgWrap.appendChild(img);
-  }
-  goTextShow.textContent = state.goText || 'You lost!';
-  gameOverUI.style.display = 'flex';
-  overlayTop.style.display = 'none';
-}
-
-function hideGameOver(){
-  gameOverUI.style.display = 'none';
-  overlayTop.style.display = 'flex';
-}
-
-// reset state for restart (no reload)
-function resetForRestart(){
-  if(!state) return;
-  // reset player pos/vel and pipes and flags
-  if (sounds.dead) { 
-  try { sounds.dead.pause(); sounds.dead.currentTime = 0; } catch(e){} 
-}
-  const w = canvas.width, h = canvas.height;
-  const pw = Math.max(28, Math.round(w * PHYS.playerWidthRatio));
-  const ph = Math.max(28, Math.round(pw * (images.player.naturalHeight || 1) / (images.player.naturalWidth || pw)));
-  state.player = { x: PHYS.playerX, y: Math.round(h/2 - ph/2), w: pw, h: ph, vy: 0 };
-  state.pipes.length = 0;
-  state.score = 0;
-  state.pipeSpeed = PHYS.pipeSpeedBase;
-  state.gap = PHYS.gap;
-  state.lastSpawn = 0;
-  state.spawnInterval = PHYS.spawnInterval;
-  state.running = true;
-  state.dead = false;
-  scoreBox.textContent = state.score;
-  hideGameOver();
-  // resume bgm only after user gesture (if startedAudio flagged, restart bgm)
-  if(sounds.bgm && startedAudio){ try{ sounds.bgm.currentTime = 0; sounds.bgm.play().catch(()=>{}); }catch(e){} }
-}
-
-// user flap input
-function onUserFlap(){
+function flap(){
   if(!state) return;
   if(state.dead){
-    resetForRestart();
+    reset();
     return;
   }
   if(sounds.bgm && !startedAudio){
     startedAudio = true;
-    try{ sounds.bgm.play().catch(()=>{}); }catch(e){}
+    sounds.bgm.play().catch(()=>{});
   }
   state.player.vy = PHYS.flapV;
 }
 
-// wire up UI buttons & generation
-genBtn.addEventListener('click', async ()=>{
-  const p = await fileToDataURL(playerFile.files[0]);
-  const pi = await fileToDataURL(pipeFile.files[0]);
-  const bg = await fileToDataURL(bgFile.files[0]);
-  const bm = await fileToDataURL(bgmFile.files[0]);
-  const dm = await fileToDataURL(deadFile.files[0]);
-  const gi = await fileToDataURL(goFile.files[0]);
+// ✅ Generate Game
+genBtn.addEventListener("click", async ()=>{
+  images.player.src = await fileToURL(playerFile.files[0]);
+  images.pipe.src = await fileToURL(pipeFile.files[0]);
+  images.bg.src   = await fileToURL(bgFile.files[0]);
+  images.go.src   = await fileToURL(goFile.files[0]);
 
-  images.player.src = p || '';
-  images.pipe.src = pi || '';
-  images.bg.src = bg || '';
-  images.go.src = gi || '';
-
-  sounds.bgm = bm ? new Audio(bm) : null;
-  sounds.dead = dm ? new Audio(dm) : null;
+  sounds.bgm = (await fileToURL(bgmFile.files[0])) ? new Audio(await fileToURL(bgmFile.files[0])) : null;
+  sounds.dead = (await fileToURL(deadFile.files[0])) ? new Audio(await fileToURL(deadFile.files[0])) : null;
 
   fitCanvas();
-  state = makeState(goTextInput.value || 'You lost!');
-  overlayTop.style.display = 'flex';
-  scoreBox.textContent = '0';
+  reset();
+  creator.style.display="none";
+  overlayTop.style.display="flex";
+  canvas.addEventListener("mousedown",flap);
+  canvas.addEventListener("touchstart",flap);
 
-  lastTime = 0;
-  if(!rafId) rafId = requestAnimationFrame(loop);
-
-  canvas.removeEventListener('click', onUserFlap);
-  canvas.addEventListener('click', onUserFlap);
-  canvas.removeEventListener('touchstart', onUserFlap);
-  canvas.addEventListener('touchstart', onUserFlap, {passive:false});
-
-  creator.style.display = 'none';
-  gameOverUI.style.display = 'none';
-
-  // ✅ Show share button
-  document.getElementById("shareControls").style.display = "block";
+  if(!rafId) rafId=requestAnimationFrame(loop);
 });
 
-// preview (no audio)
-previewBtn.addEventListener('click', async ()=>{
-  const p = await fileToDataURL(playerFile.files[0]);
-  const pi = await fileToDataURL(pipeFile.files[0]);
-  const bg = await fileToDataURL(bgFile.files[0]);
-  const gi = await fileToDataURL(goFile.files[0]);
-
-  images.player.src = p || '';
-  images.pipe.src = pi || '';
-  images.bg.src = bg || '';
-  images.go.src = gi || '';
-
-  sounds.bgm = null;
-  sounds.dead = null;
-
-  fitCanvas();
-  state = makeState(goTextInput.value || 'You lost!');
-  overlayTop.style.display = 'flex';
-  scoreBox.textContent = '0';
-  lastTime = 0;
-  if(!rafId) rafId = requestAnimationFrame(loop);
-
-  canvas.removeEventListener('click', onUserFlap);
-  canvas.addEventListener('click', onUserFlap);
-  canvas.removeEventListener('touchstart', onUserFlap);
-  canvas.addEventListener('touchstart', onUserFlap, {passive:false});
-
-  creator.style.display = 'none';
-  gameOverUI.style.display = 'none';
-
-  // ✅ Show share button too
-  document.getElementById("shareControls").style.display = "block";
-});
-
-restartBtn.addEventListener('click', ()=>{
-  resetForRestart();
-});
-
-menuBtn.addEventListener('click', ()=>{
-  if(sounds.bgm){ try{ sounds.bgm.pause(); sounds.bgm.currentTime = 0; }catch(e){} }
-  if(sounds.dead){ try { sounds.dead.pause(); sounds.dead.currentTime = 0; }catch(e){} }
-  gameOverUI.style.display = 'none';
-  overlayTop.style.display = 'none';
-  creator.style.display = 'block';
-  canvas.removeEventListener('click', onUserFlap);
-  canvas.removeEventListener('touchstart', onUserFlap);
-});
-
-backBtn.addEventListener('click', ()=>{
-  if(sounds.bgm){ try{ sounds.bgm.pause(); sounds.bgm.currentTime = 0; }catch(e){} }
-  creator.style.display = 'block';
-  overlayTop.style.display = 'none';
-  canvas.style.display = 'none';
-  canvas.removeEventListener('click', onUserFlap);
-  canvas.removeEventListener('touchstart', onUserFlap);
-});
-
-// initial hide
-overlayTop.style.display = 'none';
-gameOverUI.style.display = 'none';
-
-// start loop
-if(!rafId) rafId = requestAnimationFrame(loop);
-  // SAVE GAME TO SERVER
-document.getElementById("saveBtn").addEventListener("click", async () => {
-
-  if (!state) return;
-
+// ✅ Save Game → API
+saveBtn.addEventListener("click", async()=>{
+  if(!state) return;
   const payload = {
     player: images.player.src,
     pipe: images.pipe.src,
@@ -496,21 +278,34 @@ document.getElementById("saveBtn").addEventListener("click", async () => {
     goImg: images.go?.src || null,
     goText: state.goText
   };
-
-  const res = await fetch("https://floppy-production.up.railway.app/api/save", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
+  const res = await fetch(`${API_BASE}/api/save`,{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify(payload)
   });
-
   const data = await res.json();
-  if (data?.id) {
+  if(data?.id){
     const link = `${window.location.origin}/play.html?id=${data.id}`;
-    prompt("Share this game link:", link);
-  } else {
-    alert("Saving failed. Server error.");
+    prompt("Share this Game:",link);
   }
 });
+
+// ✅ Restart
+restartBtn.addEventListener("click", reset);
+
+// ✅ Back to editor
+menuBtn.addEventListener("click",()=>{
+  if(sounds.bgm){sounds.bgm.pause();}
+  creator.style.display="block";
+  overlayTop.style.display="none";
+  gameOverUI.style.display="none";
+});
+
+// ✅ Init
+overlayTop.style.display="none";
+gameOverUI.style.display="none";
+rafId=requestAnimationFrame(loop);
 </script>
+  
 </body>
 </html>  
