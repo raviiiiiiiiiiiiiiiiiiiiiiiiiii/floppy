@@ -482,6 +482,35 @@ gameOverUI.style.display = 'none';
 
 // start loop
 if(!rafId) rafId = requestAnimationFrame(loop);
+  // SAVE GAME TO SERVER
+document.getElementById("saveBtn").addEventListener("click", async () => {
+
+  if (!state) return;
+
+  const payload = {
+    player: images.player.src,
+    pipe: images.pipe.src,
+    bg: images.bg.src,
+    bgm: sounds.bgm?.src || null,
+    dead: sounds.dead?.src || null,
+    goImg: images.go?.src || null,
+    goText: state.goText
+  };
+
+  const res = await fetch("https://floppy-production.up.railway.app/api/save", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+
+  const data = await res.json();
+  if (data?.id) {
+    const link = `${window.location.origin}/play.html?id=${data.id}`;
+    prompt("Share this game link:", link);
+  } else {
+    alert("Saving failed. Server error.");
+  }
+});
 </script>
 </body>
 </html>  
