@@ -3,145 +3,74 @@ const loader = document.getElementById("loader");
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
-let images = { player: new Image(), pipe: new Image(), bg: new Image(), go: new Image() };
-let sounds = { bgm: null, dead: null };
+let images = { player: new Image(), pipe: new Image() };
 let state = null;
-let last = 0;
-let raf = null;
-let startedAudio = false;
+let raf;
 
-// physics
-const PHYS = {
-  gravity: 1000,
-  flapV: -320,
-  maxFall: 900,
-  pipeSpeedBase: 140,
-  pipeAccel: 0.02,
-  gap: 180,
-  spawnInterval: 1.6,
-  playerX: 90,
-  playerWidthRatio: 0.14
-};
+function fixCanvasSize(){
+  const w = Math.min(window.innerWidth, 420);
+  const h = Math.max(window.innerHeight - 120, 560);
+  canvas.width = w;
+  canvas.height = h;
+}
 
-// game state
-function makeState(goText){
-  const playerW = canvas.width * PHYS.playerWidthRatio;
-  const aspect = images.player.width / images.player.height;
-  const playerH = playerW / (aspect || 1);
-
+function makeState(){
+  const pw = canvas.width * 0.14;
+  const ph = pw;
   return {
-    player: { x: PHYS.playerX, y: canvas.height/2, vy: 0, w: playerW, h: playerH },
-    pipes: [],
-    t: 0,
-    nextSpawn: PHYS.spawnInterval,
-    score: 0,
-    dead: false,
-    goText
+    player: { x: 60, y: canvas.height/2, w: pw, h: ph, vy: 0 },
+    score: 0
   };
 }
 
-// load config from DB
-async function loadGame(){
-  const params = new URLSearchParams(window.location.search);
-  const id = params.get("id");
-  if(!id){
-    loader.innerText = "Missing game ID";
-    return;
-  }
-
+async function loadConfig(){
+  const id = new URLSearchParams(location.search).get("id");
+  if(!id){ loader.innerText="No Game ID"; return; }
   try{
     const res = await fetch(`https://floppy-production.up.railway.app/api/game/${id}`);
     const data = await res.json();
-    if(!data.success || !data.game){
-      loader.innerText = "Game Not Found";
-      return;
-    }
+    if(!data.success){ loader.innerText="Game Not Found"; return; }
     const cfg = data.game.config;
 
     images.player.src = cfg.player;
     images.pipe.src = cfg.pipe;
-    images.bg.src = cfg.bg || "";
-    images.go.src = cfg.goImg || "";
-    if(cfg.bgm) sounds.bgm = new Audio(cfg.bgm);
-    if(cfg.dead) sounds.dead = new Audio(cfg.dead);
 
-    setup(cfg.goText);
-  }catch(e){
-    loader.innerText = "Network error";
+    startGame();
+  }catch(_){
+    loader.innerText="Error loading";
   }
 }
 
-// NEW IMAGE LOAD HANDLING 🚀
-function setup(goText){
-  // ✅ fail-safe timeout if image events fail
-  let started = false;
-  const startGame = ()=>{
-    if(started) return;
-    started = true;
-    loader.style.display = "none";
-    state = makeState(goText || "You lost!");
-    scoreEl.textContent = "0";
-    if(!raf) raf = requestAnimationFrame(loop);
-  };
-
-  // ✅ Start after max 2 seconds ANYWAY
-  setTimeout(startGame, 2000);
-
-  // ✅ Try normal load first
-  images.player.onload = startGame;
-  images.pipe.onload = startGame;
+function startGame(){
+  loader.style.display="none";
+  canvas.style.display="block";
+  fixCanvasSize();
+  state = makeState();
+  scoreEl.innerText = "0";
+  raf = requestAnimationFrame(loop);
 }
 
-function loop(ts){
-  let dt = (ts - last) / 1000;
-  last = ts;
-  if(!state || dt > 0.1) { if(!raf) raf = requestAnimationFrame(loop); return; }
-
-  update(dt);
+function loop(){
+  update();
   draw();
-  if(!raf) raf = requestAnimationFrame(loop);
+  raf = requestAnimationFrame(loop);
 }
 
-function update(dt){
-  if(state.dead) return;
-  const p = state.player;
-
-  p.vy = Math.min(p.vy + PHYS.gravity * dt, PHYS.maxFall);
-  p.y += p.vy * dt;
-
-  state.t += dt;
-  if(state.t > state.nextSpawn){
-    state.t = 0;
-    state.nextSpawn = PHYS.spawnInterval;
-    state.pipes.push({
-      x: canvas.width + 20,
-      offset: (Math.random() * 260) - 130
-    });
-  }
-
-  for(const pipe of state.pipes){
-    pipe.x -= PHYS.pipeSpeedBase * dt;
-  }
-
-  // remove offscreen pipes
-  state.pipes = state.pipes.filter(p=>p.x > -100);
+function update(){
+  state.player.vy += 0.6;
+  state.player.y += state.player.vy;
 }
 
 function draw(){
-  ctx.fillStyle = "#000";
+  ctx.fillStyle="#000";
   ctx.fillRect(0,0,canvas.width,canvas.height);
 
-  const p = state.player;
-  if(images.player.width>0){
-    ctx.drawImage(images.player, p.x, p.y, p.w, p.h);
-  }
+  ctx.drawImage(images.player, state.player.x, state.player.y, state.player.w, state.player.h);
 }
 
-// tap control
-canvas.addEventListener("click", () => {
-  if(!state) return;
-  if(state.dead) return;
-  state.player.vy = PHYS.flapV;
+canvas.addEventListener("click", ()=>{
+  state.player.vy = -7;
 });
 
-loadGame();
+loadConfig();
+window.addEventListener("resize", fixCanvasSize);
