@@ -299,10 +299,21 @@ function triggerDeath(){
   if(!state || state.dead) return;
   state.dead = true;
   state.running = false;
-  // stop bg and play dead
-  if(sounds.bgm){ try{ sounds.bgm.pause(); sounds.bgm.currentTime = 0; }catch(e){} }
-  if(sounds.dead && sounds.dead.src){ try{ sounds.dead.currentTime = 0; sounds.dead.play().catch(()=>{}); }catch(e){} }
-  // show UI
+  // stop bg music
+  if(sounds.bgm){
+    try {
+      sounds.bgm.pause();
+      sounds.bgm.currentTime = 0;
+    } catch(e){}
+  }
+  // play death sound
+  if(sounds.dead && sounds.dead.src){
+    try {
+      sounds.dead.pause();
+      sounds.dead.currentTime = 0;
+      sounds.dead.play().catch(()=>{});
+    } catch(e){}
+  }
   showGameOver();
 }
 
