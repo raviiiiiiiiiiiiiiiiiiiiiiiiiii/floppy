@@ -1,4 +1,4 @@
-// play.js — loads saved config from Railway and runs the game
+// play.js — loads saved config from Railway and runs the game (patched top-bound bug)
 const API = "https://floppy-production.up.railway.app"; // your server
 const params = new URLSearchParams(location.search);
 const id = params.get("id");
@@ -107,7 +107,18 @@ function update(dt){
     if(aabb(p.x,p.y,p.w,p.h, pr.x, pr.y, pr.w, pr.h)) { die(); return; }
   }
 
-  if(p.y < 0 || p.y + p.h > canvas.height) { die(); return; }
+  // TOP / BOTTOM handling:
+  // bottom -> immediate death (player fell)
+  if(p.y + p.h > canvas.height) { die(); return; }
+
+  // top -> avoid insta-death on small overshoot from a flap.
+  // allow a small negative buffer; if player goes far above, clamp them instead of killing.
+  const topBuffer = Math.max(20, p.h * 0.5); // pixels allowed above top
+  if(p.y < -topBuffer){
+    // player went way above — clamp inside limits so game stays stable
+    p.y = -topBuffer;
+    p.vy = Math.max(0, p.vy * 0.2); // dampen upward velocity
+  }
 
   state.pipeSpeed += PHYS.pipeAccel * dt;
   if(state.gap > 110) state.gap -= 0.01 * dt;
