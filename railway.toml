@@ -1,0 +1,5 @@
+[build]
+root = "server"
+
+[deploy]
+start = "node server.js"
