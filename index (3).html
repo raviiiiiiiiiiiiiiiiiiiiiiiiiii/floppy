@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<title>Floppy F4ck — Game Maker</title>
+<style>
+  :root{--bg:#070707;--panel:#0f0f0f;--accent:#13e37a;--muted:#9aa}
+  html,body{height:100%;margin:0;background:var(--bg);color:#fff;font-family:Inter,system-ui,Arial}
+  .wrap{max-width:480px;margin:12px auto;padding:12px}
+  h1{margin:4px 0;font-size:22px;color:var(--accent)}
+  .subtitle{color:var(--muted);font-size:13px;margin-bottom:10px}
+  .card{background:var(--panel);padding:12px;border-radius:10px}
+  label{display:block;margin-top:8px;color:var(--muted);font-size:13px}
+  input[type=file], input[type=text]{width:100%;padding:8px;border-radius:8px;background:#070707;border:1px solid #222;color:#fff;margin-top:6px}
+  button{background:var(--accent);border:none;color:#021;padding:10px 12px;border-radius:8px;cursor:pointer;font-weight:700;margin-top:10px}
+  button.ghost{background:transparent;border:1px solid #222;color:var(--muted)}
+  canvas{display:block;width:100%;height:auto;border-radius:10px;background:#000;margin-top:12px}
+  .overlayTop{position:fixed;left:0;right:0;top:8px;display:flex;justify-content:space-between;padding:8px 14px;pointer-events:none}
+  .scoreBox{pointer-events:auto;background:rgba(0,0,0,0.35);padding:6px 10px;border-radius:10px;font-weight:800;font-size:20px}
+  .controls{pointer-events:auto;display:flex;gap:8px;align-items:center}
+  .small{font-size:12px;color:var(--muted);margin-top:8px}
+  #gameOverUI{position:fixed;left:0;right:0;top:24%;display:none;align-items:center;flex-direction:column;pointer-events:auto}
+  #gameOverUI .box{background:rgba(0,0,0,0.8);padding:14px;border-radius:10px;display:inline-block;text-align:center}
+  #gameOverUI img{max-width:220px;border-radius:8px;display:block;margin:0 auto}
+  footer{color:var(--muted);font-size:12px;margin-top:12px;text-align:center}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Floppy F4ck — Maker</h1>
+    <div class="subtitle">Build a portrait Flappy-style game. Upload, generate, play. Restart respawns (no reload).</div>
+
+    <div id="creator" class="card">
+      <label>Character image (required)</label>
+      <input id="playerFile" type="file" accept="image/*" />
+
+      <label>Obstacle image (required)</label>
+      <input id="pipeFile" type="file" accept="image/*" />
+
+      <label>Background image (optional)</label>
+      <input id="bgFile" type="file" accept="image/*" />
+
+      <label>Background music (mp3) — optional</label>
+      <input id="bgmFile" type="file" accept="audio/*" />
+
+      <label>Death sound (mp3) — optional</label>
+      <input id="deadFile" type="file" accept="audio/*" />
+
+      <label>Game-over text</label>
+      <input id="goText" type="text" placeholder="You lost! Try again." />
+
+      <label>Game-over image (optional)</label>
+      <input id="goFile" type="file" accept="image/*" />
+
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button id="genBtn">Generate & Play</button>
+        <button id="previewBtn" class="ghost">Preview (no audio)</button>
+      </div>
+
+      <div class="small">Why should developers have all the fun? Upload a meme, make people suffer. Keep uploads small for best performance.</div>
+    </div>
+
+    <canvas id="gameCanvas" width="360" height="640"></canvas>
+    <div id="shareControls" style="display:none; text-align:center; margin-top:10px;">
+  <button id="saveBtn" class="ghost" style="width:100%;font-size:14px;">
+    Save & Share 🔗
+  </button>
+</div>
+
+    <div class="overlayTop" id="overlayTop" style="display:none">
+      <div class="scoreBox" id="scoreBox">0</div>
+      <div class="controls">
+        <button id="backBtn" class="ghost">Back</button>
+      </div>
+    </div>
+
+    <div id="gameOverUI">
+      <div class="box">
+        <div id="goImgWrap"></div>
+        <div id="goTextShow" style="font-weight:700;font-size:18px;margin-top:10px"></div>
+        <div style="margin-top:12px;display:flex;gap:8px;justify-content:center">
+          <button id="restartBtn">RESTART</button>
+          <button id="menuBtn" class="ghost">EDIT</button>
+        </div>
+      </div>
+    </div>
+
+    <footer>Why should developers have all the fun? Make and play. ✌️</footer>
+  </div>
+
+<script>
+/* FINAL WORKING Flappy-style generator
+   - Proper physics (time-step integration)
+   - Restart = respawn in-game (no reload)
+   - Score works
+   - Game-over image + text
+   - Audio plays after first user gesture
+   - Scales uploaded images sensibly
+*/
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+const creator = document.getElementById('creator');
+const overlayTop = document.getElementById('overlayTop');
+const scoreBox = document.getElementById('scoreBox');
+const gameOverUI = document.getElementById('gameOverUI');
+const goImgWrap = document.getElementById('goImgWrap');
+const goTextShow = document.getElementById('goTextShow');
+
+const playerFile = document.getElementById('playerFile');
+const pipeFile = document.getElementById('pipeFile');
+const bgFile = document.getElementById('bgFile');
+const bgmFile = document.getElementById('bgmFile');
+const deadFile = document.getElementById('deadFile');
+const goFile = document.getElementById('goFile');
+const goTextInput = document.getElementById('goText');
+
+const genBtn = document.getElementById('genBtn');
+const previewBtn = document.getElementById('previewBtn');
+const restartBtn = document.getElementById('restartBtn');
+const menuBtn = document.getElementById('menuBtn');
+const backBtn = document.getElementById('backBtn');
+
+let images = { player: new Image(), pipe: new Image(), bg: new Image(), go: new Image() };
+let sounds = { bgm: null, dead: null };
+
+let state = null;          // holds runtime state
+let lastTime = 0;          // for dt
+let startedAudio = false;  // to satisfy autoplay policies
+
+// PHYSICS tuned to feel like Flappy Bird (stable)
+const PHYS = {
+  gravity: 1000,      // px/s^2
+  flapV: -320,        // px/s
+  maxFall: 900,       // px/s
+  pipeSpeedBase: 140, // px/s initial
+  pipeAccel: 0.02,    // incremental accel
+  gap: 180,           // px
+  spawnInterval: 1.6, // seconds
+  playerX: 90,
+  playerWidthRatio: 0.14
+};
+
+// utility: read file as dataURL
+function fileToDataURL(file){
+  return new Promise(res => {
+    if(!file){ res(null); return; }
+    const r = new FileReader();
+    r.onload = ()=> res(r.result);
+    r.onerror = ()=> res(null);
+    r.readAsDataURL(file);
+  });
+}
+
+// responsive canvas sizing
+function fitCanvas(){
+  const vw = Math.min(window.innerWidth - 24, 420);
+  canvas.width = Math.max(320, vw);
+  canvas.height = Math.max(560, Math.round(window.innerHeight - 140));
+}
+window.addEventListener('resize', fitCanvas);
+
+// initialize state object
+function makeState(overText){
+  const w = canvas.width, h = canvas.height;
+  const pw = Math.max(28, Math.round(w * PHYS.playerWidthRatio));
+  const ph = Math.max(28, Math.round(pw * (images.player.naturalHeight || 1) / (images.player.naturalWidth || pw)));
+  return {
+    player: { x: PHYS.playerX, y: Math.round(h/2 - ph/2), w: pw, h: ph, vy: 0 },
+    pipes: [],        // list of rects {x,y,w,h,top,pairId,passed}
+    pipeSpeed: PHYS.pipeSpeedBase,
+    gap: PHYS.gap,
+    lastSpawn: 0,
+    spawnInterval: PHYS.spawnInterval,
+    score: 0,
+    running: true,
+    dead: false,
+    goText: overText || 'You lost!',
+  };
+}
+
+// spawn a pipe pair
+function spawnPair(s){
+  const h = canvas.height;
+  const minTop = 40;
+  const maxTop = Math.max(80, h - s.gap - 120);
+  const topH = minTop + Math.floor(Math.random() * (Math.max(0, maxTop - minTop) + 1));
+  const x = canvas.width + 20;
+  const w = Math.max(40, Math.round(canvas.width * 0.16));
+  const id = Date.now() + Math.random();
+  s.pipes.push({ x, y: 0, w, h: topH, top: true, pairId: id, passed: false });
+  s.pipes.push({ x, y: topH + s.gap, w, h: h - (topH + s.gap), top: false, pairId: id, passed: false });
+}
+
+// AABB collision
+function aabb(ax,ay,aw,ah, bx,by,bw,bh){
+  return !(bx > ax + aw || bx + bw < ax || by > ay + ah || by + bh < ay);
+}
+
+// update with dt (seconds)
+function update(dt){
+  if(!state || state.dead) return;
+
+  // physics
+  state.player.vy += PHYS.gravity * dt;
+  if(state.player.vy > PHYS.maxFall) state.player.vy = PHYS.maxFall;
+  state.player.y += state.player.vy * dt;
+
+  // spawn
+  state.lastSpawn += dt;
+  if(state.lastSpawn >= state.spawnInterval){
+    state.lastSpawn = 0;
+    spawnPair(state);
+  }
+
+  // move pipes and scoring
+  for(let i = state.pipes.length - 1; i >= 0; i--){
+    const p = state.pipes[i];
+    p.x -= state.pipeSpeed * dt;
+    if(p.top && !p.passed && (p.x + p.w) < state.player.x){
+      state.score++;
+      p.passed = true;
+      // mark other pipe of same pair
+      for(const q of state.pipes) if(q.pairId === p.pairId) q.passed = true;
+      scoreBox.textContent = state.score;
+    }
+    if(p.x + p.w < -50) state.pipes.splice(i,1);
+  }
+
+  // collisions
+  if(state.player.y + state.player.h > canvas.height || state.player.y < 0){
+    triggerDeath();
+    return;
+  }
+  for(const p of state.pipes){
+    if(aabb(state.player.x, state.player.y, state.player.w, state.player.h, p.x, p.y, p.w, p.h)){
+      triggerDeath();
+      return;
+    }
+  }
+
+  // gentle difficulty ramp
+  state.pipeSpeed += PHYS.pipeAccel * dt;
+  // tiny gap shrink over long time (negligible per second)
+  if(state.gap > 110) state.gap -= 0.01 * dt;
+}
+
+// render everything
+function render(){
+  if(!state) return;
+  ctx.clearRect(0,0,canvas.width, canvas.height);
+
+  // background
+  if(images.bg.src && images.bg.complete){
+    ctx.drawImage(images.bg, 0, 0, images.bg.naturalWidth, images.bg.naturalHeight, 0, 0, canvas.width, canvas.height);
+  } else {
+    ctx.fillStyle = "#071018";
+    ctx.fillRect(0,0,canvas.width, canvas.height);
+  }
+
+  // pipes
+  for(const p of state.pipes){
+    if(images.pipe.src && images.pipe.complete){
+      if(p.top){
+        ctx.save();
+        ctx.translate(p.x + p.w/2, p.y + p.h/2);
+        ctx.scale(1,-1);
+        ctx.drawImage(images.pipe, -p.w/2, -p.h/2, p.w, p.h);
+        ctx.restore();
+      } else {
+        ctx.drawImage(images.pipe, p.x, p.y, p.w, p.h);
+      }
+    } else {
+      ctx.fillStyle = "#AA4422";
+      ctx.fillRect(p.x, p.y, p.w, p.h);
+    }
+  }
+
+  // player
+  if(images.player.src && images.player.complete){
+    ctx.drawImage(images.player, state.player.x, state.player.y, state.player.w, state.player.h);
+  } else {
+    ctx.fillStyle = "#FFD92E";
+    ctx.fillRect(state.player.x, state.player.y, state.player.w, state.player.h);
+  }
+}
+
+// main loop
+let rafId = null;
+function loop(ts){
+  if(!lastTime) lastTime = ts;
+  const dt = Math.min(0.05, (ts - lastTime) / 1000);
+  lastTime = ts;
+
+  if(state && state.running && !state.dead) update(dt);
+  if(state) render();
+  rafId = requestAnimationFrame(loop);
+}
+
+// trigger death
+function triggerDeath(){
+  if(!state || state.dead) return;
+  state.dead = true;
+  state.running = false;
+  // stop bg music
+  if(sounds.bgm){
+    try {
+      sounds.bgm.pause();
+      sounds.bgm.currentTime = 0;
+    } catch(e){}
+  }
+  // play death sound
+  if(sounds.dead && sounds.dead.src){
+    try {
+      sounds.dead.pause();
+      sounds.dead.currentTime = 0;
+      sounds.dead.play().catch(()=>{});
+    } catch(e){}
+  }
+  showGameOver();
+}
+
+// show/hide UI
+function showGameOver(){
+  // populate image and text
+  goImgWrap.innerHTML = '';
+  if(images.go.src){
+    const img = document.createElement('img');
+    img.src = images.go.src;
+    img.style.maxWidth = '220px';
+    img.style.borderRadius = '8px';
+    goImgWrap.appendChild(img);
+  }
+  goTextShow.textContent = state.goText || 'You lost!';
+  gameOverUI.style.display = 'flex';
+  overlayTop.style.display = 'none';
+}
+
+function hideGameOver(){
+  gameOverUI.style.display = 'none';
+  overlayTop.style.display = 'flex';
+}
+
+// reset state for restart (no reload)
+function resetForRestart(){
+  if(!state) return;
+  // reset player pos/vel and pipes and flags
+  if (sounds.dead) { 
+  try { sounds.dead.pause(); sounds.dead.currentTime = 0; } catch(e){} 
+}
+  const w = canvas.width, h = canvas.height;
+  const pw = Math.max(28, Math.round(w * PHYS.playerWidthRatio));
+  const ph = Math.max(28, Math.round(pw * (images.player.naturalHeight || 1) / (images.player.naturalWidth || pw)));
+  state.player = { x: PHYS.playerX, y: Math.round(h/2 - ph/2), w: pw, h: ph, vy: 0 };
+  state.pipes.length = 0;
+  state.score = 0;
+  state.pipeSpeed = PHYS.pipeSpeedBase;
+  state.gap = PHYS.gap;
+  state.lastSpawn = 0;
+  state.spawnInterval = PHYS.spawnInterval;
+  state.running = true;
+  state.dead = false;
+  scoreBox.textContent = state.score;
+  hideGameOver();
+  // resume bgm only after user gesture (if startedAudio flagged, restart bgm)
+  if(sounds.bgm && startedAudio){ try{ sounds.bgm.currentTime = 0; sounds.bgm.play().catch(()=>{}); }catch(e){} }
+}
+
+// user flap input
+function onUserFlap(){
+  if(!state) return;
+  if(state.dead){
+    resetForRestart();
+    return;
+  }
+  if(sounds.bgm && !startedAudio){
+    startedAudio = true;
+    try{ sounds.bgm.play().catch(()=>{}); }catch(e){}
+  }
+  state.player.vy = PHYS.flapV;
+}
+
+// wire up UI buttons & generation
+genBtn.addEventListener('click', async ()=>{
+  const p = await fileToDataURL(playerFile.files[0]);
+  const pi = await fileToDataURL(pipeFile.files[0]);
+  const bg = await fileToDataURL(bgFile.files[0]);
+  const bm = await fileToDataURL(bgmFile.files[0]);
+  const dm = await fileToDataURL(deadFile.files[0]);
+  const gi = await fileToDataURL(goFile.files[0]);
+
+  images.player.src = p || '';
+  images.pipe.src = pi || '';
+  images.bg.src = bg || '';
+  images.go.src = gi || '';
+
+  sounds.bgm = bm ? new Audio(bm) : null;
+  sounds.dead = dm ? new Audio(dm) : null;
+
+  fitCanvas();
+  state = makeState(goTextInput.value || 'You lost!');
+  overlayTop.style.display = 'flex';
+  scoreBox.textContent = '0';
+
+  lastTime = 0;
+  if(!rafId) rafId = requestAnimationFrame(loop);
+
+  canvas.removeEventListener('click', onUserFlap);
+  canvas.addEventListener('click', onUserFlap);
+  canvas.removeEventListener('touchstart', onUserFlap);
+  canvas.addEventListener('touchstart', onUserFlap, {passive:false});
+
+  creator.style.display = 'none';
+  gameOverUI.style.display = 'none';
+
+  // ✅ Show share button
+  document.getElementById("shareControls").style.display = "block";
+});
+
+// preview (no audio)
+previewBtn.addEventListener('click', async ()=>{
+  const p = await fileToDataURL(playerFile.files[0]);
+  const pi = await fileToDataURL(pipeFile.files[0]);
+  const bg = await fileToDataURL(bgFile.files[0]);
+  const gi = await fileToDataURL(goFile.files[0]);
+
+  images.player.src = p || '';
+  images.pipe.src = pi || '';
+  images.bg.src = bg || '';
+  images.go.src = gi || '';
+
+  sounds.bgm = null;
+  sounds.dead = null;
+
+  fitCanvas();
+  state = makeState(goTextInput.value || 'You lost!');
+  overlayTop.style.display = 'flex';
+  scoreBox.textContent = '0';
+  lastTime = 0;
+  if(!rafId) rafId = requestAnimationFrame(loop);
+
+  canvas.removeEventListener('click', onUserFlap);
+  canvas.addEventListener('click', onUserFlap);
+  canvas.removeEventListener('touchstart', onUserFlap);
+  canvas.addEventListener('touchstart', onUserFlap, {passive:false});
+
+  creator.style.display = 'none';
+  gameOverUI.style.display = 'none';
+
+  // ✅ Show share button too
+  document.getElementById("shareControls").style.display = "block";
+});
+
+restartBtn.addEventListener('click', ()=>{
+  resetForRestart();
+});
+
+menuBtn.addEventListener('click', ()=>{
+  if(sounds.bgm){ try{ sounds.bgm.pause(); sounds.bgm.currentTime = 0; }catch(e){} }
+  if(sounds.dead){ try { sounds.dead.pause(); sounds.dead.currentTime = 0; }catch(e){} }
+  gameOverUI.style.display = 'none';
+  overlayTop.style.display = 'none';
+  creator.style.display = 'block';
+  canvas.removeEventListener('click', onUserFlap);
+  canvas.removeEventListener('touchstart', onUserFlap);
+});
+
+backBtn.addEventListener('click', ()=>{
+  if(sounds.bgm){ try{ sounds.bgm.pause(); sounds.bgm.currentTime = 0; }catch(e){} }
+  creator.style.display = 'block';
+  overlayTop.style.display = 'none';
+  canvas.style.display = 'none';
+  canvas.removeEventListener('click', onUserFlap);
+  canvas.removeEventListener('touchstart', onUserFlap);
+});
+
+// initial hide
+overlayTop.style.display = 'none';
+gameOverUI.style.display = 'none';
+
+// start loop
+if(!rafId) rafId = requestAnimationFrame(loop);
+</script>
+</body>
+</html>  
