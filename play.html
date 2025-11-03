@@ -1,39 +1,22 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html>
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>Play — Floppy F4ck</title>
+<meta charset="UTF-8">
+<title>Play Game</title>
 <style>
-  html,body{height:100%;margin:0;background:#000;color:#fff;font-family:Inter,system-ui,Arial;overflow:hidden}
-  #wrap{max-width:480px;margin:0 auto;padding:8px}
-  canvas{display:block;width:100%;height:auto;border-radius:8px;background:#000;touch-action:none}
-  #score{position:fixed;left:12px;top:12px;background:rgba(0,0,0,0.45);padding:6px 10px;border-radius:10px;font-weight:800;font-size:20px}
-  #back{position:fixed;right:12px;top:12px;background:transparent;border:1px solid #333;color:#aaa;padding:6px 8px;border-radius:8px}
-  #gameOver{position:fixed;left:0;right:0;top:32%;display:none;justify-content:center;align-items:center;pointer-events:auto}
-  #gameOver .box{background:rgba(0,0,0,0.85);padding:14px;border-radius:10px;text-align:center;max-width:320px;margin:auto}
-  #gameOver img{max-width:220px;border-radius:8px;display:block;margin:0 auto}
-  #gameOver button{margin:8px;padding:10px 12px;border-radius:8px;border:none;background:#13e37a;color:#000;font-weight:800}
-  #loader{position:fixed;left:0;right:0;top:45%;text-align:center;color:#aaa}
+  body { margin:0; background:black; color:white; font-family:Arial; }
+  #loader { text-align:center; margin-top:120px; font-size:20px; }
+  #canvas { display:none; margin:0 auto; background:black; }
+  #overlay {
+    display:none; position:fixed; top:10px; left:0; right:0;
+    text-align:center; font-size:24px; font-weight:bold;
+  }
 </style>
 </head>
 <body>
-  <div id="score">0</div>
-  <button id="back">Back</button>
-  <div id="loader">Loading game…</div>
-  <canvas id="c"></canvas>
-
-  <div id="gameOver">
-    <div class="box">
-      <div id="goImgWrap"></div>
-      <div id="goText" style="font-weight:700;font-size:18px;margin-top:10px"></div>
-      <div style="margin-top:12px">
-        <button id="restartBtn">RESTART</button>
-        <button id="toMaker" style="margin-left:8px;background:transparent;color:#fff;border:1px solid #333;padding:10px 12px;border-radius:8px">EDIT</button>
-      </div>
-    </div>
-  </div>
-
+<div id="loader">Loading game...</div>
+<div id="overlay"><span id="score">0</span></div>
+<canvas id="canvas"></canvas>
 <script src="play.js"></script>
 </body>
 </html>
