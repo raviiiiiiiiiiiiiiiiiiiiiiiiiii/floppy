@@ -1,191 +1,105 @@
-// ✅ FINAL FIXED PLAY.JS — No instant death, proper collisions, bg draw
+const API_BASE = "https://floppy-production.up.railway.app";
 
-const canvas = document.getElementById("canvas");
+const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
-const loader = document.getElementById("loader");
-const scoreEl = document.getElementById("score");
+const statusBox = document.getElementById("statusMsg");
 
-let images = { player: new Image(), pipe: new Image(), bg: new Image(), go: new Image() };
-let sounds = { bgm: null, dead: null };
-let state = null;
-let lastTime = 0;
-let raf;
-let startedAudio = false;
+let images = { player:new Image(), pipe:new Image(), bg:new Image(), go:new Image() };
+let sounds = { bgm:null, dead:null };
+let state=null;
+let rafId=null;
+let lastTime=0;
+let startedAudio=false;
 
 const PHYS = {
-  gravity: 1000,
-  flapV: -320,
-  maxFall: 900,
-  pipeSpeedBase: 140,
-  pipeAccel: 0.02,
-  gap: 180,
-  spawnInterval: 1.6,
-  playerX: 90,
-  playerWidthRatio: 0.14
+  gravity:1000, flapV:-320, maxFall:900,
+  pipeSpeedBase:140, pipeAccel:0.02,
+  gap:180, spawnInterval:1.6,
+  playerX:90
 };
 
-function fitCanvas(){
-  const w = Math.min(window.innerWidth - 10, 420);
-  const h = Math.max(window.innerHeight - 140, 560);
-  canvas.width = w;
-  canvas.height = h;
+function getId(){
+  const u=new URL(window.location);
+  return u.searchParams.get("id");
 }
 
-function makeState(goTxt){
-  const w = canvas.width;
-  const h = canvas.height;
-  const pw = Math.round(w * PHYS.playerWidthRatio);
-  const ph = pw;
-
-  return {
-    player: { x: PHYS.playerX, y: Math.round(h/2-ph/2), w: pw, h: ph, vy: 0 },
-    pipes: [],
-    pipeSpeed: PHYS.pipeSpeedBase,
-    gap: PHYS.gap,
-    lastSpawn: 0,
-    spawnInterval: PHYS.spawnInterval,
-    score: 0,
-    running: true,
-    dead: false,
-    goText: goTxt || "You lost!"
-  };
+function makeState(goText){
+  return{goText,pipes:[],player:{x:PHYS.playerX,y:250,vy:0},dead:false,tSpawn:0,pipeSpeed:PHYS.pipeSpeedBase,score:0}
 }
 
 async function loadGame(){
-  const id = new URLSearchParams(location.search).get("id");
-  if(!id){ loader.innerText = "Bad ID"; return; }
+  const id=getId();
+  if(!id)return error("Missing Game ID");
+  status("Loading Game...");
+  const res=await fetch(`${API_BASE}/api/game/${id}`);
+  if(!res.ok)return error("Game Not Found");
+  const data=await res.json();
 
-  try{
-    const res = await fetch(`https://floppy-production.up.railway.app/api/game/${id}`);
-    const data = await res.json();
-    if(!data.success){ loader.innerText = "Game Missing"; return; }
-    const cfg = data.game.config;
+  images.player.src=data.config.player;
+  images.pipe.src=data.config.pipe;
+  images.bg.src=data.config.bg;
+  images.go.src=data.config.goImg;
+  sounds.bgm=data.config.bgm?new Audio(data.config.bgm):null;
+  sounds.dead=data.config.dead?new Audio(data.config.dead):null;
 
-    images.player.src = cfg.player;
-    images.pipe.src = cfg.pipe;
-    images.bg.src = cfg.bg || "";
+  state=makeState(data.config.goText||"Game Over!");
+  status("");
 
-    if(cfg.bgm) sounds.bgm = new Audio(cfg.bgm);
-    if(cfg.dead) sounds.dead = new Audio(cfg.dead);
-
-    images.player.onload = start;
-  }catch(e){
-    loader.innerText="Load Error";
-  }
-}
-
-function start(){
-  loader.style.display="none";
   canvas.style.display="block";
-  document.getElementById("overlay").style.display="flex";
-  fitCanvas();
-
-  state = makeState();
-  scoreEl.innerText = "0";
-  lastTime = 0;
-  raf = requestAnimationFrame(loop);
-
-  canvas.addEventListener("click", tap);
-  canvas.addEventListener("touchstart", tap, {passive:false});
+  play();
 }
 
-function tap(){
-  if(state.dead){
-    resetGame();
-    return;
-  }
-  if(sounds.bgm && !startedAudio){
-    startedAudio = true;
-    try{ sounds.bgm.play(); }catch(e){}
-  }
-  state.player.vy = PHYS.flapV;
+function status(t){statusBox.innerText=t}
+function error(t){status(t)}
+
+function flap(){
+  if(!state)return;
+  if(state.dead){reset();return;}
+  if(sounds.bgm&&!startedAudio){startedAudio=true;sounds.bgm.play().catch(()=>{})}
+  state.player.vy=PHYS.flapV;
 }
 
-function resetGame(){
-  if(sounds.dead){ try{ sounds.dead.pause(); sounds.dead.currentTime=0; }catch(e){} }
-  if(sounds.bgm && startedAudio){
-    try{ sounds.bgm.currentTime=0; sounds.bgm.play(); }catch(e){}
-  }
-  state = makeState();
-  scoreEl.innerText="0";
+function reset(){state=makeState(state.goText)}
+
+function die(){
+  state.dead=true;
+  if(sounds.bgm)try{sounds.bgm.pause()}catch(e){}
+  if(sounds.dead)try{sounds.dead.play()}catch(e){}
 }
 
 function loop(ts){
-  const dt = Math.min(0.05, (ts - lastTime)/1000);
-  lastTime = ts;
-  if(!state.dead) update(dt);
-  draw();
-  raf = requestAnimationFrame(loop);
-}
-
-function spawnPipe(){
-  const h = canvas.height;
-  const min = 40;
-  const max = h - state.gap - 120;
-  const topH = Math.floor(Math.random()*(max-min))+min;
-  const x = canvas.width + 20;
-  const w = Math.round(canvas.width*0.16);
-  const id = Date.now()+Math.random();
-
-  state.pipes.push({x,y:0,w,h:topH,top:true,pair:id,passed:false});
-  state.pipes.push({x,y:topH+state.gap,w,h:h-(topH+state.gap),top:false,pair:id,passed:false});
-}
-
-function update(dt){
-  state.player.vy += PHYS.gravity * dt;
-  state.player.y += state.player.vy * dt;
-
-  state.lastSpawn += dt;
-  if(state.lastSpawn >= state.spawnInterval){
-    state.lastSpawn = 0;
-    spawnPipe();
-  }
-
-  for(let i=state.pipes.length-1; i>=0; i--){
-    const p = state.pipes[i];
-    p.x -= state.pipeSpeed * dt;
-    if(p.top && !p.passed && (p.x+p.w) < state.player.x){
-      state.score++; state.pipeSpeed += 1;
-      scoreEl.innerText = state.score;
-      p.passed = true;
+  if(!state)return;
+  let dt=(ts-lastTime)/1000;
+  lastTime=ts;
+  ctx.clearRect(0,0,360,640);
+  if(images.bg.src)ctx.drawImage(images.bg,0,0,360,640);
+  if(!state.dead){
+    state.player.vy+=PHYS.gravity*dt;
+    state.player.vy=Math.min(state.player.vy,PHYS.maxFall);
+    state.player.y+=state.player.vy*dt;
+    state.tSpawn+=dt;
+    if(state.tSpawn>=PHYS.spawnInterval){
+      state.tSpawn=0;
+      const top=Math.random()*200+60;
+      state.pipes.push({x:360,top});
     }
-    if(p.x+p.w < -50) state.pipes.splice(i,1);
+    state.pipeSpeed+=PHYS.pipeAccel;
   }
-
-  if(checkCollision()) die();
-}
-
-function draw(){
-  if(images.bg.src) ctx.drawImage(images.bg,0,0,canvas.width,canvas.height);
-  else{ ctx.fillStyle="#000"; ctx.fillRect(0,0,canvas.width,canvas.height); }
-
-  for(const p of state.pipes)
-    ctx.drawImage(images.pipe,p.x,p.y,p.w,p.h);
-
-  const pl = state.player;
-  ctx.drawImage(images.player, pl.x, pl.y, pl.w, pl.h);
-}
-
-function checkCollision(){
-  const p = state.player;
-  if(p.y <=0 || p.y+p.h >= canvas.height) return true;
-
-  for(const o of state.pipes){
-    if(p.x < o.x + o.w &&
-       p.x + p.w > o.x &&
-       p.y < o.y + o.h &&
-       p.y + p.h > o.y){
-      return true;
-    }
+  for(const p of state.pipes){
+    if(!state.dead)p.x-=state.pipeSpeed*dt;
+    ctx.drawImage(images.pipe,p.x,0,60,p.top);
+    ctx.drawImage(images.pipe,p.x,p.top+PHYS.gap,60,640-p.top-PHYS.gap);
+    if(state.player.x+40>p.x&&state.player.x<p.x+60&&(state.player.y<p.top||state.player.y+40>p.top+PHYS.gap))die();
   }
-  return false;
+  if(state.player.y>600||state.player.y<0)die();
+  ctx.drawImage(images.player,state.player.x,state.player.y,40,40);
+  rafId=requestAnimationFrame(loop);
 }
 
-function die(){
-  state.dead = true;
-  if(sounds.bgm){ try{ sounds.bgm.pause(); }catch(e){} }
-  if(sounds.dead){ try{ sounds.dead.currentTime=0; sounds.dead.play(); }catch(e){} }
+function play(){
+  canvas.addEventListener("touchstart",flap);
+  canvas.addEventListener("mousedown",flap);
+  if(!rafId)rafId=requestAnimationFrame(loop);
 }
 
-window.addEventListener("resize", fitCanvas);
 loadGame();
