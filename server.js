@@ -1,39 +1,54 @@
 import express from "express";
 import cors from "cors";
-import pkg from "pg";
-const { Pool } = pkg;
+import pg from "pg";
 
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: "20mb" })); // allow images/music base64
+app.use(express.json({ limit: "15mb" }));
 
-const pool = new Pool({
-  connectionString: "postgresql://neondb_owner:npg_ROn5BW1Asgkt@ep-round-breeze-a18e82xs-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+const db = new pg.Client({
+  connectionString: process.env.DATABASE_URL,
 });
+db.connect()
+  .then(() => console.log("✅ Connected to NeonDB"))
+  .catch((err) => console.error("❌ DB Connect Error:", err));
 
-// Save game
 app.post("/api/save", async (req, res) => {
-  const { gameHtml } = req.body;
-  if (!gameHtml) return res.status(400).json({ error: "Missing gameHtml" });
+  try {
+    const { player, pipe, bg, bgm, dead, goImg, goText } = req.body;
 
-  const result = await pool.query(
-    "INSERT INTO games (game_data) VALUES ($1) RETURNING id",
-    [gameHtml]
-  );
+    const result = await db.query(
+      `INSERT INTO floppy_games (player, pipe, bg, bgm, dead, goImg, goText)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
+       RETURNING id`,
+      [player, pipe, bg, bgm, dead, goImg, goText]
+    );
 
-  return res.json({ id: result.rows[0].id });
+    res.json({ success: true, id: result.rows[0].id });
+  } catch (err) {
+    console.error(err);
+    res.json({ success: false });
+  }
 });
 
-// Load game by ID
-app.get("/game/:id", async (req, res) => {
-  const id = req.params.id;
-  const result = await pool.query("SELECT game_data FROM games WHERE id=$1", [id]);
-  if (result.rowCount === 0) return res.send("Game Not Found");
+app.get("/api/game/:id", async (req, res) => {
+  try {
+    const result = await db.query(
+      `SELECT * FROM floppy_games WHERE id=$1`,
+      [req.params.id]
+    );
 
-  res.set("Content-Type", "text/html");
-  res.send(result.rows[0].game_data);
+    if (result.rows.length === 0)
+      return res.status(404).json({ error: "Not found" });
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
 });
 
-app.listen(8080, () =>
-  console.log("✅ Server running on 8080")
+// ✅ Railway will use PORT env var
+app.listen(process.env.PORT || 8080, () =>
+  console.log("✅ Server running")
 );
