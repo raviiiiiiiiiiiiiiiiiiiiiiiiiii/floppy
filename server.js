@@ -1,61 +1,39 @@
 import express from "express";
 import cors from "cors";
 import pkg from "pg";
-import dotenv from "dotenv";
-dotenv.config();
-
 const { Pool } = pkg;
 
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: "10mb" }));
+app.use(express.json({ limit: "20mb" })); // allow images/music base64
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL
+  connectionString: "postgresql://neondb_owner:npg_ROn5BW1Asgkt@ep-round-breeze-a18e82xs-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
 });
 
-// Create table if not exists
-pool.query(`
-CREATE TABLE IF NOT EXISTS games (
-  id TEXT PRIMARY KEY,
-  config JSONB NOT NULL
-)`
-);
+// Save game
+app.post("/api/save", async (req, res) => {
+  const { gameHtml } = req.body;
+  if (!gameHtml) return res.status(400).json({ error: "Missing gameHtml" });
 
-// ✅ Save game config
-app.post("/save", async (req, res) => {
-  try {
-    const id = req.body.id;
-    const config = req.body.config;
+  const result = await pool.query(
+    "INSERT INTO games (game_data) VALUES ($1) RETURNING id",
+    [gameHtml]
+  );
 
-    await pool.query(
-      "INSERT INTO games (id, config) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET config=$2",
-      [id, config]
-    );
-
-    res.json({ ok: true, id });
-  } catch (err) {
-    console.log(err);
-    res.status(500).json({ error: "DB save failed" });
-  }
+  return res.json({ id: result.rows[0].id });
 });
 
-// ✅ Load game config
+// Load game by ID
 app.get("/game/:id", async (req, res) => {
-  try {
-    const id = req.params.id;
-    const result = await pool.query("SELECT config FROM games WHERE id=$1", [id]);
+  const id = req.params.id;
+  const result = await pool.query("SELECT game_data FROM games WHERE id=$1", [id]);
+  if (result.rowCount === 0) return res.send("Game Not Found");
 
-    if (result.rowCount === 0)
-      return res.status(404).json({ error: "Game not found" });
-
-    res.json(result.rows[0].config);
-  } catch (err) {
-    res.status(500).json({ error: "DB error" });
-  }
+  res.set("Content-Type", "text/html");
+  res.send(result.rows[0].game_data);
 });
 
-const PORT = process.env.PORT || 8080;
-app.listen(PORT, () =>
-  console.log("✅ Backend running on port", PORT)
+app.listen(8080, () =>
+  console.log("✅ Server running on 8080")
 );
