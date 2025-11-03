@@ -1,4 +1,4 @@
-// ✅ FINAL STABLE PLAY.JS
+// ✅ FINAL FIXED PLAY.JS — No instant death, proper collisions, bg draw
 
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
@@ -64,7 +64,6 @@ async function loadGame(){
     images.player.src = cfg.player;
     images.pipe.src = cfg.pipe;
     images.bg.src = cfg.bg || "";
-    images.go.src = cfg.goImg || "";
 
     if(cfg.bgm) sounds.bgm = new Audio(cfg.bgm);
     if(cfg.dead) sounds.dead = new Audio(cfg.dead);
@@ -95,7 +94,6 @@ function tap(){
     resetGame();
     return;
   }
-  // Enable sound after first tap
   if(sounds.bgm && !startedAudio){
     startedAudio = true;
     try{ sounds.bgm.play(); }catch(e){}
@@ -115,7 +113,7 @@ function resetGame(){
 function loop(ts){
   const dt = Math.min(0.05, (ts - lastTime)/1000);
   lastTime = ts;
-  if(state.running && !state.dead) update(dt);
+  if(!state.dead) update(dt);
   draw();
   raf = requestAnimationFrame(loop);
 }
@@ -126,8 +124,8 @@ function spawnPipe(){
   const max = h - state.gap - 120;
   const topH = Math.floor(Math.random()*(max-min))+min;
   const x = canvas.width + 20;
-  const id = Date.now()+Math.random();
   const w = Math.round(canvas.width*0.16);
+  const id = Date.now()+Math.random();
 
   state.pipes.push({x,y:0,w,h:topH,top:true,pair:id,passed:false});
   state.pipes.push({x,y:topH+state.gap,w,h:h-(topH+state.gap),top:false,pair:id,passed:false});
@@ -135,12 +133,11 @@ function spawnPipe(){
 
 function update(dt){
   state.player.vy += PHYS.gravity * dt;
-  if(state.player.vy > PHYS.maxFall) state.player.vy = PHYS.maxFall;
   state.player.y += state.player.vy * dt;
 
   state.lastSpawn += dt;
   if(state.lastSpawn >= state.spawnInterval){
-    state.lastSpawn=0;
+    state.lastSpawn = 0;
     spawnPipe();
   }
 
@@ -151,36 +148,41 @@ function update(dt){
       state.score++; state.pipeSpeed += 1;
       scoreEl.innerText = state.score;
       p.passed = true;
-      for(const q of state.pipes) if(q.pair===p.pair) q.passed=true;
     }
     if(p.x+p.w < -50) state.pipes.splice(i,1);
   }
 
-  if(checkDeath()) die();
+  if(checkCollision()) die();
 }
 
 function draw(){
-  ctx.fillStyle="#000";
-  ctx.fillRect(0,0,canvas.width,canvas.height);
+  if(images.bg.src) ctx.drawImage(images.bg,0,0,canvas.width,canvas.height);
+  else{ ctx.fillStyle="#000"; ctx.fillRect(0,0,canvas.width,canvas.height); }
 
-  for(const p of state.pipes){
+  for(const p of state.pipes)
     ctx.drawImage(images.pipe,p.x,p.y,p.w,p.h);
-  }
 
-  ctx.drawImage(images.player,state.player.x,state.player.y,state.player.w,state.player.h);
+  const pl = state.player;
+  ctx.drawImage(images.player, pl.x, pl.y, pl.w, pl.h);
 }
 
-function checkDeath(){
+function checkCollision(){
   const p = state.player;
   if(p.y <=0 || p.y+p.h >= canvas.height) return true;
-  for(const x of state.pipes){
-    if(p.x<p.x+x.w && p.x+p.w>x.x && p.y<p.y+x.h && p.y+p.h>x.y) return true;
+
+  for(const o of state.pipes){
+    if(p.x < o.x + o.w &&
+       p.x + p.w > o.x &&
+       p.y < o.y + o.h &&
+       p.y + p.h > o.y){
+      return true;
+    }
   }
   return false;
 }
 
 function die(){
-  state.dead=true;
+  state.dead = true;
   if(sounds.bgm){ try{ sounds.bgm.pause(); }catch(e){} }
   if(sounds.dead){ try{ sounds.dead.currentTime=0; sounds.dead.play(); }catch(e){} }
 }
