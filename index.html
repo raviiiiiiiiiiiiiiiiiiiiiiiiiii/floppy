@@ -62,6 +62,11 @@
     </div>
 
     <canvas id="gameCanvas" width="360" height="640"></canvas>
+    <div id="shareControls" style="display:none; text-align:center; margin-top:10px;">
+  <button id="saveBtn" class="ghost" style="width:100%;font-size:14px;">
+    Save & Share 🔗
+  </button>
+</div>
 
     <div class="overlayTop" id="overlayTop" style="display:none">
       <div class="scoreBox" id="scoreBox">0</div>
@@ -366,12 +371,10 @@ function resetForRestart(){
 // user flap input
 function onUserFlap(){
   if(!state) return;
-  // if dead or not started, restart
   if(state.dead){
     resetForRestart();
     return;
   }
-  // first user gesture should start audio if audio available (browsers block autoplay)
   if(sounds.bgm && !startedAudio){
     startedAudio = true;
     try{ sounds.bgm.play().catch(()=>{}); }catch(e){}
@@ -381,7 +384,6 @@ function onUserFlap(){
 
 // wire up UI buttons & generation
 genBtn.addEventListener('click', async ()=>{
-  // read files
   const p = await fileToDataURL(playerFile.files[0]);
   const pi = await fileToDataURL(pipeFile.files[0]);
   const bg = await fileToDataURL(bgFile.files[0]);
@@ -397,27 +399,24 @@ genBtn.addEventListener('click', async ()=>{
   sounds.bgm = bm ? new Audio(bm) : null;
   sounds.dead = dm ? new Audio(dm) : null;
 
-  // responsive canvas
   fitCanvas();
-
-  // create initial state
   state = makeState(goTextInput.value || 'You lost!');
   overlayTop.style.display = 'flex';
   scoreBox.textContent = '0';
 
   lastTime = 0;
-  // ensure loop running
   if(!rafId) rafId = requestAnimationFrame(loop);
 
-  // attach input listeners
   canvas.removeEventListener('click', onUserFlap);
   canvas.addEventListener('click', onUserFlap);
   canvas.removeEventListener('touchstart', onUserFlap);
   canvas.addEventListener('touchstart', onUserFlap, {passive:false});
 
-  // hide creator
   creator.style.display = 'none';
   gameOverUI.style.display = 'none';
+
+  // ✅ Show share button
+  document.getElementById("shareControls").style.display = "block";
 });
 
 // preview (no audio)
@@ -449,6 +448,9 @@ previewBtn.addEventListener('click', async ()=>{
 
   creator.style.display = 'none';
   gameOverUI.style.display = 'none';
+
+  // ✅ Show share button too
+  document.getElementById("shareControls").style.display = "block";
 });
 
 restartBtn.addEventListener('click', ()=>{
@@ -456,22 +458,16 @@ restartBtn.addEventListener('click', ()=>{
 });
 
 menuBtn.addEventListener('click', ()=>{
-  // stop audio, hide overlay and return to editor
   if(sounds.bgm){ try{ sounds.bgm.pause(); sounds.bgm.currentTime = 0; }catch(e){} }
-  
-  if(sounds.dead){
-  try { sounds.dead.pause(); sounds.dead.currentTime = 0; }catch(e){}
-}
+  if(sounds.dead){ try { sounds.dead.pause(); sounds.dead.currentTime = 0; }catch(e){} }
   gameOverUI.style.display = 'none';
   overlayTop.style.display = 'none';
   creator.style.display = 'block';
-  // detach listeners
   canvas.removeEventListener('click', onUserFlap);
   canvas.removeEventListener('touchstart', onUserFlap);
 });
 
 backBtn.addEventListener('click', ()=>{
-  // stop and go back
   if(sounds.bgm){ try{ sounds.bgm.pause(); sounds.bgm.currentTime = 0; }catch(e){} }
   creator.style.display = 'block';
   overlayTop.style.display = 'none';
@@ -484,8 +480,8 @@ backBtn.addEventListener('click', ()=>{
 overlayTop.style.display = 'none';
 gameOverUI.style.display = 'none';
 
-// start rendering loop even if not started; it will wait for state to exist
+// start loop
 if(!rafId) rafId = requestAnimationFrame(loop);
 </script>
 </body>
-</html>
+</html>  
