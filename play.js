@@ -1,267 +1,147 @@
-// play.js — loads saved config from Railway and runs the game (patched top-bound bug)
-const API = "https://floppy-production.up.railway.app"; // your server
-const params = new URLSearchParams(location.search);
-const id = params.get("id");
-const canvas = document.getElementById("c");
-const ctx = canvas.getContext("2d");
 const scoreEl = document.getElementById("score");
-const gameOverUI = document.getElementById("gameOver");
-const goImgWrap = document.getElementById("goImgWrap");
-const goTextEl = document.getElementById("goText");
-const restartBtn = document.getElementById("restartBtn");
-const toMaker = document.getElementById("toMaker");
-const backBtn = document.getElementById("back");
 const loader = document.getElementById("loader");
-
-if(!id){
-  alert("No game id provided.");
-  location.href = "/";
-}
-
-// physics tuned same as maker
-const PHYS = {
-  gravity: 1000, flapV: -320, maxFall: 900,
-  pipeSpeedBase: 140, pipeAccel: 0.02, gap: 180,
-  spawnInterval: 1.6, playerX: 90, playerWidthRatio: 0.14
-};
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
 
 let images = { player: new Image(), pipe: new Image(), bg: new Image(), go: new Image() };
 let sounds = { bgm: null, dead: null };
-let state = null, lastTs = 0, startedAudio = false, raf = null;
+let state = null;
+let last = 0;
+let raf = null;
+let startedAudio = false;
 
-// responsive canvas
-function fit(){
-  const vw = Math.min(window.innerWidth - 24, 480);
-  canvas.width = Math.max(320, vw);
-  canvas.height = Math.max(560, Math.round(window.innerHeight - 120));
-}
-window.addEventListener("resize", fit);
+// physics
+const PHYS = {
+  gravity: 1000,
+  flapV: -320,
+  maxFall: 900,
+  pipeSpeedBase: 140,
+  pipeAccel: 0.02,
+  gap: 180,
+  spawnInterval: 1.6,
+  playerX: 90,
+  playerWidthRatio: 0.14
+};
 
-// load JSON config from server
-async function fetchConfig(){
-  try {
-    const res = await fetch(`${API}/api/game/${id}`);
-    if(!res.ok) throw new Error("Game not found");
-    const cfg = await res.json();
-    return cfg;
-  } catch (e) {
-    console.error(e);
-    alert("Failed to load game.");
-    location.href = "/";
-  }
-}
-
+// game state
 function makeState(goText){
-  const w = canvas.width, h = canvas.height;
-  const pw = Math.max(28, Math.round(w * PHYS.playerWidthRatio));
-  const ph = Math.max(28, Math.round(pw * (images.player.naturalHeight || 1) / (images.player.naturalWidth || pw)));
+  const playerW = canvas.width * PHYS.playerWidthRatio;
+  const aspect = images.player.width / images.player.height;
+  const playerH = playerW / (aspect || 1);
+
   return {
-    player: { x: PHYS.playerX, y: Math.round(h/2 - ph/2), w: pw, h: ph, vy: 0 },
-    pipes: [], pipeSpeed: PHYS.pipeSpeedBase, gap: PHYS.gap,
-    lastSpawn: 0, spawnInterval: PHYS.spawnInterval,
-    score: 0, running: true, dead: false, goText: goText || "You lost!"
+    player: { x: PHYS.playerX, y: canvas.height/2, vy: 0, w: playerW, h: playerH },
+    pipes: [],
+    t: 0,
+    nextSpawn: PHYS.spawnInterval,
+    score: 0,
+    dead: false,
+    goText
   };
 }
 
-// spawn pair
-function spawnPair(){
-  const h = canvas.height, minTop = 40, maxTop = Math.max(80, h - state.gap - 120);
-  const topH = minTop + Math.floor(Math.random() * (Math.max(0, maxTop - minTop) + 1));
-  const x = canvas.width + 20;
-  const w = Math.max(40, Math.round(canvas.width * 0.16));
-  const id = Date.now() + Math.random();
-  state.pipes.push({ x, y: 0, w, h: topH, top: true, pairId:id, passed:false });
-  state.pipes.push({ x, y: topH + state.gap, w, h: canvas.height - (topH + state.gap), top:false, pairId:id, passed:false });
-}
-
-// AABB
-function aabb(ax,ay,aw,ah, bx,by,bw,bh){
-  return !(bx > ax + aw || bx + bw < ax || by > ay + ah || by + bh < ay);
-}
-
-function update(dt){
-  if(!state || state.dead) return;
-
-  const p = state.player;
-  p.vy += PHYS.gravity * dt;
-  if(p.vy > PHYS.maxFall) p.vy = PHYS.maxFall;
-  p.y += p.vy * dt;
-
-  state.lastSpawn += dt;
-  if(state.lastSpawn >= state.spawnInterval){
-    state.lastSpawn = 0;
-    spawnPair();
+// load config from DB
+async function loadGame(){
+  const params = new URLSearchParams(window.location.search);
+  const id = params.get("id");
+  if(!id){
+    loader.innerText = "Missing game ID";
+    return;
   }
 
-  for(let i=state.pipes.length-1;i>=0;i--){
-    const pr = state.pipes[i];
-    pr.x -= state.pipeSpeed * dt;
-    if(pr.top && !pr.passed && (pr.x + pr.w) < p.x){
-      state.score++;
-      scoreEl.textContent = state.score;
-      pr.passed = true;
-      // mark sibling
-      for(const q of state.pipes) if(q.pairId === pr.pairId) q.passed = true;
+  try{
+    const res = await fetch(`https://floppy-production.up.railway.app/api/game/${id}`);
+    const data = await res.json();
+    if(!data.success || !data.game){
+      loader.innerText = "Game Not Found";
+      return;
     }
-    if(pr.x + pr.w < -60) state.pipes.splice(i,1);
-    if(aabb(p.x,p.y,p.w,p.h, pr.x, pr.y, pr.w, pr.h)) { die(); return; }
+    const cfg = data.game.config;
+
+    images.player.src = cfg.player;
+    images.pipe.src = cfg.pipe;
+    images.bg.src = cfg.bg || "";
+    images.go.src = cfg.goImg || "";
+    if(cfg.bgm) sounds.bgm = new Audio(cfg.bgm);
+    if(cfg.dead) sounds.dead = new Audio(cfg.dead);
+
+    setup(cfg.goText);
+  }catch(e){
+    loader.innerText = "Network error";
   }
-
-  // TOP / BOTTOM handling:
-  // bottom -> immediate death (player fell)
-  if(p.y + p.h > canvas.height) { die(); return; }
-
-  // top -> avoid insta-death on small overshoot from a flap.
-  // allow a small negative buffer; if player goes far above, clamp them instead of killing.
-  const topBuffer = Math.max(20, p.h * 0.5); // pixels allowed above top
-  if(p.y < -topBuffer){
-    // player went way above — clamp inside limits so game stays stable
-    p.y = -topBuffer;
-    p.vy = Math.max(0, p.vy * 0.2); // dampen upward velocity
-  }
-
-  state.pipeSpeed += PHYS.pipeAccel * dt;
-  if(state.gap > 110) state.gap -= 0.01 * dt;
 }
 
-function render(){
-  if(!state) return;
-  ctx.clearRect(0,0,canvas.width,canvas.height);
+// NEW IMAGE LOAD HANDLING 🚀
+function setup(goText){
+  // ✅ fail-safe timeout if image events fail
+  let started = false;
+  const startGame = ()=>{
+    if(started) return;
+    started = true;
+    loader.style.display = "none";
+    state = makeState(goText || "You lost!");
+    scoreEl.textContent = "0";
+    if(!raf) raf = requestAnimationFrame(loop);
+  };
 
-  if(images.bg.src && images.bg.complete){
-    ctx.drawImage(images.bg, 0, 0, images.bg.naturalWidth, images.bg.naturalHeight, 0, 0, canvas.width, canvas.height);
-  } else {
-    ctx.fillStyle = "#071018";
-    ctx.fillRect(0,0,canvas.width,canvas.height);
-  }
+  // ✅ Start after max 2 seconds ANYWAY
+  setTimeout(startGame, 2000);
 
-  for(const p of state.pipes){
-    if(images.pipe.src && images.pipe.complete){
-      if(p.top){
-        ctx.save();
-        ctx.translate(p.x + p.w/2, p.y + p.h/2);
-        ctx.scale(1,-1);
-        ctx.drawImage(images.pipe, -p.w/2, -p.h/2, p.w, p.h);
-        ctx.restore();
-      } else {
-        ctx.drawImage(images.pipe, p.x, p.y, p.w, p.h);
-      }
-    } else {
-      ctx.fillStyle = "#AA4422";
-      ctx.fillRect(p.x, p.y, p.w, p.h);
-    }
-  }
-
-  if(images.player.src && images.player.complete){
-    ctx.drawImage(images.player, state.player.x, state.player.y, state.player.w, state.player.h);
-  } else {
-    ctx.fillStyle = "#FFD92E";
-    ctx.fillRect(state.player.x, state.player.y, state.player.w, state.player.h);
-  }
+  // ✅ Try normal load first
+  images.player.onload = startGame;
+  images.pipe.onload = startGame;
 }
 
 function loop(ts){
-  if(!lastTs) lastTs = ts;
-  const dt = Math.min(0.05, (ts - lastTs) / 1000);
-  lastTs = ts;
+  let dt = (ts - last) / 1000;
+  last = ts;
+  if(!state || dt > 0.1) { if(!raf) raf = requestAnimationFrame(loop); return; }
 
-  if(state && state.running && !state.dead) update(dt);
-  if(state) render();
-  raf = requestAnimationFrame(loop);
-}
-
-function die(){
-  if(!state || state.dead) return;
-  state.dead = true;
-  state.running = false;
-  if(sounds.bgm){ try{ sounds.bgm.pause(); sounds.bgm.currentTime = 0; }catch(e){} }
-  if(sounds.dead && sounds.dead.src){ try{ sounds.dead.currentTime = 0; sounds.dead.play().catch(()=>{});}catch(e){} }
-  showGameOver();
-}
-
-function showGameOver(){
-  goImgWrap.innerHTML = "";
-  if(images.go.src){
-    const img = document.createElement("img");
-    img.src = images.go.src;
-    img.style.maxWidth = "220px";
-    img.style.borderRadius = "8px";
-    goImgWrap.appendChild(img);
-  }
-  goTextEl.textContent = state.goText || "You lost!";
-  gameOverUI.style.display = "flex";
-}
-
-function hideGameOver(){
-  gameOverUI.style.display = "none";
-}
-
-function resetForRestart(){
-  if(!state) return;
-  if(sounds.dead){ try{ sounds.dead.pause(); sounds.dead.currentTime = 0; }catch(e){} }
-  const w = canvas.width, h = canvas.height;
-  const pw = Math.max(28, Math.round(w * PHYS.playerWidthRatio));
-  const ph = Math.max(28, Math.round(pw * (images.player.naturalHeight || 1) / (images.player.naturalWidth || pw)));
-  state.player = { x: PHYS.playerX, y: Math.round(h/2 - ph/2), w: pw, h: ph, vy: 0 };
-  state.pipes.length = 0;
-  state.score = 0;
-  state.pipeSpeed = PHYS.pipeSpeedBase;
-  state.gap = PHYS.gap;
-  state.lastSpawn = 0;
-  state.spawnInterval = PHYS.spawnInterval;
-  state.running = true;
-  state.dead = false;
-  scoreEl.textContent = state.score;
-  hideGameOver();
-  if(sounds.bgm && startedAudio){ try{ sounds.bgm.currentTime = 0; sounds.bgm.play().catch(()=>{}); }catch(e){} }
-}
-
-// user input -> flap
-function flap(){
-  if(!state) return;
-  if(state.dead){
-    // restart in-game
-    resetForRestart();
-    return;
-  }
-  if(sounds.bgm && !startedAudio){
-    startedAudio = true;
-    try{ sounds.bgm.play().catch(()=>{}); }catch(e){}
-  }
-  state.player.vy = PHYS.flapV;
-}
-
-canvas.addEventListener("click", flap);
-canvas.addEventListener("touchstart", (e)=>{ e.preventDefault(); flap(); }, { passive:false });
-
-restartBtn.addEventListener("click", ()=> resetForRestart());
-toMaker.addEventListener("click", ()=> location.href = "/");
-backBtn.addEventListener("click", ()=> location.href = "/");
-
-// start
-(async function init(){
-  fit();
-  loader.style.display = "block";
-  const cfg = await fetchConfig();
-
-  // set images + sounds
-  images.player.src = cfg.player || "";
-  images.pipe.src = cfg.pipe || "";
-  if(cfg.bg) images.bg.src = cfg.bg;
-  if(cfg.goImg) images.go.src = cfg.goImg;
-
-  if(cfg.bgm) sounds.bgm = new Audio(cfg.bgm);
-  if(cfg.dead) sounds.dead = new Audio(cfg.dead);
-
-loader.style.display = "none";
-
-// ✅ Ensure images fully load before starting game
-Promise.all([
-  new Promise(res=> images.player.complete ? res() : images.player.onload = res),
-  new Promise(res=> images.pipe.complete ? res() : images.pipe.onload = res),
-  new Promise(res=> res()) // bg might be missing, ignore
-]).then(()=>{
-  state = makeState(cfg.goText || "You lost!");
-  scoreEl.textContent = "0";
+  update(dt);
+  draw();
   if(!raf) raf = requestAnimationFrame(loop);
+}
+
+function update(dt){
+  if(state.dead) return;
+  const p = state.player;
+
+  p.vy = Math.min(p.vy + PHYS.gravity * dt, PHYS.maxFall);
+  p.y += p.vy * dt;
+
+  state.t += dt;
+  if(state.t > state.nextSpawn){
+    state.t = 0;
+    state.nextSpawn = PHYS.spawnInterval;
+    state.pipes.push({
+      x: canvas.width + 20,
+      offset: (Math.random() * 260) - 130
+    });
+  }
+
+  for(const pipe of state.pipes){
+    pipe.x -= PHYS.pipeSpeedBase * dt;
+  }
+
+  // remove offscreen pipes
+  state.pipes = state.pipes.filter(p=>p.x > -100);
+}
+
+function draw(){
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  const p = state.player;
+  if(images.player.width>0){
+    ctx.drawImage(images.player, p.x, p.y, p.w, p.h);
+  }
+}
+
+// tap control
+canvas.addEventListener("click", () => {
+  if(!state) return;
+  if(state.dead) return;
+  state.player.vy = PHYS.flapV;
 });
+
+loadGame();
