@@ -1,54 +1,69 @@
 import express from "express";
 import cors from "cors";
-import pg from "pg";
+import { Pool } from "pg";
+import { v4 as uuid } from "uuid";
 
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: "15mb" }));
+app.use(express.json({ limit: "20mb" })); // Allow base64 images
 
-const db = new pg.Client({
+// ✅ PostgreSQL connection via DATABASE_URL env
+const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
 });
-db.connect()
-  .then(() => console.log("✅ Connected to NeonDB"))
-  .catch((err) => console.error("❌ DB Connect Error:", err));
 
+// ✅ Test root
+app.get("/", (req, res) => {
+  res.send("✅ Floppy Game API Running");
+});
+
+// ✅ Save Game
 app.post("/api/save", async (req, res) => {
   try {
+    const id = uuid();
     const { player, pipe, bg, bgm, dead, goImg, goText } = req.body;
 
-    const result = await db.query(
-      `INSERT INTO floppy_games (player, pipe, bg, bgm, dead, goImg, goText)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)
-       RETURNING id`,
-      [player, pipe, bg, bgm, dead, goImg, goText]
+    await pool.query(
+      `INSERT INTO games (id, config)
+       VALUES ($1, $2)`,
+      [id, {
+        player,
+        pipe,
+        bg,
+        bgm,
+        dead,
+        goImg,
+        goText
+      }]
     );
 
-    res.json({ success: true, id: result.rows[0].id });
+    res.json({ success: true, id });
   } catch (err) {
-    console.error(err);
-    res.json({ success: false });
+    console.error("Save Error:", err);
+    res.status(500).json({ success: false });
   }
 });
 
+// ✅ Load Game
 app.get("/api/game/:id", async (req, res) => {
   try {
-    const result = await db.query(
-      `SELECT * FROM floppy_games WHERE id=$1`,
+    const { rows } = await pool.query(
+      `SELECT config FROM games WHERE id=$1`,
       [req.params.id]
     );
 
-    if (result.rows.length === 0)
-      return res.status(404).json({ error: "Not found" });
+    if (!rows.length) {
+      return res.status(404).json({ error: "Game Not Found" });
+    }
 
-    res.json(result.rows[0]);
+    res.json(rows[0].config);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
+    console.error("Fetch Error:", err);
+    res.status(500).json({ error: "Fetch Failed" });
   }
 });
 
-// ✅ Railway will use PORT env var
-app.listen(process.env.PORT || 8080, () =>
-  console.log("✅ Server running")
-);
+// ✅ Railway port support
+const PORT = process.env.PORT || 8080;
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
