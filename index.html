@@ -342,6 +342,9 @@ function hideGameOver(){
 function resetForRestart(){
   if(!state) return;
   // reset player pos/vel and pipes and flags
+  if (sounds.dead) { 
+  try { sounds.dead.pause(); sounds.dead.currentTime = 0; } catch(e){} 
+}
   const w = canvas.width, h = canvas.height;
   const pw = Math.max(28, Math.round(w * PHYS.playerWidthRatio));
   const ph = Math.max(28, Math.round(pw * (images.player.naturalHeight || 1) / (images.player.naturalWidth || pw)));
@@ -455,6 +458,10 @@ restartBtn.addEventListener('click', ()=>{
 menuBtn.addEventListener('click', ()=>{
   // stop audio, hide overlay and return to editor
   if(sounds.bgm){ try{ sounds.bgm.pause(); sounds.bgm.currentTime = 0; }catch(e){} }
+  
+  if(sounds.dead){
+  try { sounds.dead.pause(); sounds.dead.currentTime = 0; }catch(e){}
+}
   gameOverUI.style.display = 'none';
   overlayTop.style.display = 'none';
   creator.style.display = 'block';
