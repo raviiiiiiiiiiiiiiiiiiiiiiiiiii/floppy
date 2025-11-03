@@ -1,68 +1,61 @@
 import express from "express";
 import cors from "cors";
-import { Pool } from "pg";
+import pkg from "pg";
 import path from "path";
 import { fileURLToPath } from "url";
 
+const { Pool } = pkg;
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+// ✅ Directory fix for serving frontend
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+app.use(express.static(path.join(__dirname, "../content")));
 
-const app = express();
-app.use(express.json({ limit: "25mb" })); 
-app.use(cors());
-
-// ✅ Connect Neon DB
+// ✅ DB Connection
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
 });
 
-// ✅ Save game config
-app.post("/api/save", async (req, res) => {
-  try {
-    const id = Math.random().toString(36).slice(2, 10);
-    await pool.query("INSERT INTO games (id, config) VALUES ($1, $2)", [
-      id,
-      req.body
-    ]);
-    res.json({ success: true, id });
-  } catch (err) {
-    console.error("SAVE FAIL:", err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// ✅ Load game config
-app.get("/api/game/:id", async (req, res) => {
-  try {
-    const q = await pool.query("SELECT config FROM games WHERE id=$1", [
-      req.params.id
-    ]);
-
-    if (q.rows.length === 0) {
-      return res.status(404).json({ success: false, error: "Game Not Found" });
-    }
-
-    res.json(q.rows[0].config);
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// ✅ API test endpoint
+// ✅ Test API
 app.get("/api/test", (req, res) => {
   res.json({ success: true, message: "✅ API OK" });
 });
 
-// ✅ Serve FRONTEND *AFTER* API routes
-app.use(express.static(__dirname));
+// ✅ Save Game Data
+app.post("/api/save", async (req, res) => {
+  const { id, config } = req.body;
+  if (!id || !config) return res.status(400).json({ success: false, message: "id + config required" });
 
-// ✅ Catch-all fallback → index.html
-app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "index.html"));
+  try {
+    await pool.query(
+      "INSERT INTO games (id, config) VALUES ($1, $2) ON CONFLICT(id) DO UPDATE SET config = $2",
+      [id, config]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Error saving:", err);
+    res.status(500).json({ success: false });
+  }
 });
 
-// ✅ Required for Railway
-const PORT = process.env.PORT || 8080;
-app.listen(PORT, () =>
-  console.log(`✅ Server running on port ${PORT}`)
-);
+// ✅ Load Game
+app.get("/api/game/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const dbRes = await pool.query("SELECT config FROM games WHERE id=$1", [id]);
+    if (dbRes.rows.length === 0) return res.status(404).json({ success: false, message: "Not found" });
+
+    res.json({ success: true, config: dbRes.rows[0].config });
+  } catch (err) {
+    console.error("Error loading:", err);
+    res.status(500).json({ success: false });
+  }
+});
+
+// ✅ Start
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log("✅ Floppy Game API Running on", PORT));
