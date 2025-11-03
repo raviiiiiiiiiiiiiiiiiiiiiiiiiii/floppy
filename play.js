@@ -253,10 +253,15 @@ backBtn.addEventListener("click", ()=> location.href = "/");
   if(cfg.bgm) sounds.bgm = new Audio(cfg.bgm);
   if(cfg.dead) sounds.dead = new Audio(cfg.dead);
 
-  // create state and start
+loader.style.display = "none";
+
+// ✅ Ensure images fully load before starting game
+Promise.all([
+  new Promise(res=> images.player.complete ? res() : images.player.onload = res),
+  new Promise(res=> images.pipe.complete ? res() : images.pipe.onload = res),
+  new Promise(res=> res()) // bg might be missing, ignore
+]).then(()=>{
   state = makeState(cfg.goText || "You lost!");
   scoreEl.textContent = "0";
-  loader.style.display = "none";
-  // start loop
   if(!raf) raf = requestAnimationFrame(loop);
-})();
+});
